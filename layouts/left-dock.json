@@ -1,0 +1,144 @@
+{
+  "name": "左侧竖排 Dock",
+  "description": "2×6 竖排，停靠屏幕左边缘；径向菜单按等面积公式分环，数组顺序=优先级（内环→外环）",
+  "buttonSize": 120,
+  "gap": 12,
+  "padding": 14,
+  "columns": 2,
+  "position": "left",
+  "scale": 1,
+  "handle": { "size": 30, "position": "top" },
+  "buttons": [
+    {
+      "id": "voice",
+      "icon": "mic",
+      "label": "语音",
+      "sub": "启动语音",
+      "group": "voice",
+      "keys": {
+        "ctrl": true,
+        "win": true,
+        "shift": true
+      }
+    },
+    {
+      "id": "steer",
+      "icon": "zap",
+      "label": "Steer",
+      "sub": "插队提示词",
+      "group": "agent",
+      "keys": {
+        "ctrl": true,
+        "key": "s"
+      }
+    },
+    {
+      "id": "esc",
+      "icon": "hand",
+      "label": "中断",
+      "sub": "Esc",
+      "group": "danger",
+      "confirm": true,
+      "keys": {
+        "key": "escape"
+      }
+    },
+    {
+      "id": "enter",
+      "icon": "send",
+      "label": "发送",
+      "sub": "Enter",
+      "group": "agent",
+      "keys": {
+        "key": "enter"
+      }
+    },
+    {
+      "id": "backspace",
+      "icon": "delete",
+      "label": "退格",
+      "sub": "Backspace",
+      "group": "edit",
+      "keys": {
+        "key": "backspace"
+      }
+    },
+    {
+      "id": "slash",
+      "icon": "slash",
+      "label": "命令",
+      "sub": "斜杠",
+      "group": "cmd",
+      "keys": {
+        "text": "/"
+      }
+    },
+    {
+      "id": "plan",
+      "icon": "clipboard-list",
+      "label": "Plan",
+      "sub": "Shift+Tab",
+      "group": "agent",
+      "keys": {
+        "shift": true,
+        "key": "tab"
+      }
+    },
+    {
+      "id": "selectall",
+      "icon": "square-dashed",
+      "label": "全选",
+      "sub": "Ctrl+A",
+      "group": "agent",
+      "keys": {
+        "ctrl": true,
+        "key": "a"
+      }
+    },
+    {
+      "id": "newline",
+      "icon": "corner-down-left",
+      "label": "换行",
+      "sub": "Shift+Enter",
+      "group": "edit",
+      "keys": {
+        "shift": true,
+        "key": "enter"
+      }
+    },
+    {
+      "id": "at",
+      "icon": "at-sign",
+      "label": "文件",
+      "sub": "引用",
+      "group": "cmd",
+      "keys": {
+        "text": "@"
+      }
+    },
+    {
+      "id": "copy",
+      "icon": "copy",
+      "label": "复制",
+      "sub": "Ctrl+C",
+      "group": "edit",
+      "keys": {
+        "ctrl": true,
+        "key": "c"
+      }
+    },
+    {
+      "id": "paste",
+      "icon": "clipboard-paste",
+      "label": "粘贴",
+      "sub": "Ctrl+V",
+      "group": "edit",
+      "keys": {
+        "ctrl": true,
+        "key": "v"
+      }
+    }
+  ],
+  "showLabel": false,
+  "showSub": false
+}

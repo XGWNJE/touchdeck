@@ -1,0 +1,15 @@
+# 依赖
+node_modules/
+
+# Android 构建产物与本地配置
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+
+# 运行时状态
+touchdeck.state.json
+
+# 调试日志
+prototype/run.log

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>TouchDeck</title>
+<style>
+  :root { --t-bar-bg: rgba(24,24,28,.92); }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #101014;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    touch-action: manipulation; /* 原生触控：杀掉双击缩放延迟 */ }
+
+  body { display: flex; align-items: center; justify-content: center; }
+
+  #bar {
+    display: grid;
+    background: var(--t-bar-bg);
+    border-radius: var(--t-bar-radius);
+    border: 1px solid var(--t-bar-border);
+    transition: opacity .5s ease;
+  }
+  #bar.dim { opacity: var(--dim-op, .6); }
+
+  .btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: var(--t-btn-radius); cursor: pointer;
+    background: var(--t-btn-bg); color: var(--t-btn-fg);
+    border: 1px solid var(--t-btn-border);
+    box-shadow: 0 2px 0 rgba(0,0,0,.4);
+    transition: transform .08s, background .08s;
+  }
+  .btn .icon { font-size: var(--t-icon-size); line-height: 1.2; width: var(--t-icon-size); height: var(--t-icon-size);
+    display: flex; align-items: center; justify-content: center; }
+  .btn .icon svg { width: 100%; height: 100%; }
+  .btn .icon img { width: 100%; height: 100%; object-fit: contain; }
+  .btn .icon svg * { vector-effect: non-scaling-stroke; }
+  #bar.no-label .btn .icon { width: calc(var(--t-icon-size) * 1.5); height: calc(var(--t-icon-size) * 1.5); }
+  .btn .label { font-size: var(--t-label-size); font-weight: 600; margin-top: 4px; }
+  .btn .sub { font-size: var(--t-sub-size); color: var(--t-btn-sub); margin-top: 2px; }
+
+  /* 反馈：变色 + 下沉，停留 450ms（原生触控下即按即显，无视频流延迟） */
+  .btn.pressed { background: var(--t-pressed-bg); color: var(--t-pressed-fg); transform: translateY(3px) scale(.96); box-shadow: none; }
+  .btn.pressed .sub { color: var(--t-pressed-sub); }
+  .btn.armed { border-color: var(--t-armed-border); box-shadow: 0 0 18px var(--t-armed-glow); background: var(--t-armed-bg); color: var(--t-armed-fg); }
+  .btn.armed .sub { color: var(--t-armed-fg); }
+  .btn.unconfigured { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+  /* 链路状态指示灯：绿 = 服务器可达，红 = 断链 */
+  #link { position: fixed; top: 10px; right: 12px; width: 12px; height: 12px; border-radius: 50%;
+    background: #4ade80; box-shadow: 0 0 8px #4ade80; transition: background .3s, box-shadow .3s; }
+  #link.down { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="link" class="down"></div>
+<script>
+  const bar = document.getElementById("bar");
+  const linkDot = document.getElementById("link");
+
+  /* 链路桥：fetch 替代 Electron preload；每次按键同时刷新链路指示灯。
+     演示模式（Android 离线资产页注入 window.TOUCHDECK_DEMO）：配置/图标全本地，
+     按键只走视觉反馈，不发网络请求 */
+  const DEMO = window.TOUCHDECK_DEMO || null;
+  const bridge = DEMO ? {
+    getConfig: async () => DEMO.config,
+    getIcon: async (name) => DEMO.icons[name] || null,
+    press: async (id) => ({ ok: true, demo: true, id }),
+  } : {
+    async getConfig() {
+      const r = await fetch("/api/config");
+      if (!r.ok) throw new Error("config " + r.status);
+      return r.json();
+    },
+    async getIcon(name) {
+      const r = await fetch("/api/icon/" + name);
+      return r.ok ? r.json() : null;
+    },
+    async press(id) {
+      const r = await fetch("/api/press", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      return r.json();
+    },
+  };
+
+  function setLink(up) {
+    linkDot.classList.toggle("down", !up);
+  }
+
+  /* 把主题 JSON 注入为 CSS 令牌与分组样式（与 Electron 渲染端同源） */
+  function applyTheme(theme) {
+    const root = document.documentElement.style;
+    const set = (k, v) => { if (v !== undefined && v !== null) root.setProperty(k, typeof v === "number" ? v + "px" : v); };
+
+    if (theme.bar) {
+      const rgb = theme.bar.backgroundRgb || "24, 24, 28";
+      const op = theme.bar.opacity !== undefined ? theme.bar.opacity : 0.92;
+      set("--t-bar-bg", `rgba(${rgb}, ${op})`);
+      set("--t-bar-radius", theme.bar.borderRadius);
+      set("--t-bar-border", theme.bar.borderColor);
+      bar.style.setProperty("--dim-op", theme.bar.idleDimOpacity !== undefined ? theme.bar.idleDimOpacity : 0.6);
+    }
+    if (theme.button) {
+      set("--t-btn-bg", theme.button.background);
+      set("--t-btn-fg", theme.button.color);
+      set("--t-btn-sub", theme.button.subColor);
+      set("--t-btn-radius", theme.button.borderRadius);
+      set("--t-btn-border", theme.button.borderColor);
+      set("--t-icon-size", theme.button.iconSize);
+      set("--t-label-size", theme.button.labelSize);
+      set("--t-sub-size", theme.button.subSize);
+    }
+    if (theme.pressed) {
+      set("--t-pressed-bg", theme.pressed.background);
+      set("--t-pressed-fg", theme.pressed.color);
+      set("--t-pressed-sub", theme.pressed.subColor);
+    }
+    if (theme.armed) {
+      set("--t-armed-bg", theme.armed.background);
+      set("--t-armed-fg", theme.armed.color);
+      set("--t-armed-border", theme.armed.borderColor);
+      set("--t-armed-glow", theme.armed.glowColor);
+    }
+    const old = document.getElementById("grp-styles");
+    if (old) old.remove();
+    const style = document.createElement("style");
+    style.id = "grp-styles";
+    const groups = theme.groups || {};
+    style.textContent = Object.entries(groups).map(([name, g]) =>
+      `.btn.grp-${name} { background: ${g.background}; border-color: ${g.borderColor}; }`
+    ).join("\n");
+    document.head.appendChild(style);
+  }
+
+  /* 闲时变暗 */
+  let dimTimer = null;
+  let dimCfg = { seconds: 5 };
+  function wake() {
+    bar.classList.remove("dim");
+    clearTimeout(dimTimer);
+    dimTimer = setTimeout(() => bar.classList.add("dim"), dimCfg.seconds * 1000);
+  }
+  document.addEventListener("pointerdown", wake);
+
+  /* 渲染引擎：布局决定网格与按钮，主题决定长相 */
+  async function render() {
+    const config = await bridge.getConfig();
+    const { behavior, theme, layout, buttons } = config;
+    dimCfg.seconds = behavior.idleDimSeconds;
+    applyTheme(theme);
+    if (layout.showLabel === false && layout.showSub === false) bar.classList.add("no-label");
+
+    const scale = layout.scale || 1;
+    bar.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+    bar.style.gap = layout.gap * scale + "px";
+    bar.style.padding = layout.padding * scale + "px";
+
+    for (const b of buttons) {
+      const el = document.createElement("div");
+      el.className = "btn grp-" + (b.group || "edit");
+      el.style.width = layout.buttonSize * scale + "px";
+      el.style.height = layout.buttonSize * scale + "px";
+      const showLabel = layout.showLabel !== false;
+      const showSub = layout.showSub !== false;
+      el.innerHTML = `<div class="icon"></div>`
+        + (showLabel ? `<div class="label">${b.label}</div>` : "")
+        + (showSub ? `<div class="sub">${b.sub}</div>` : "");
+      const iconEl = el.querySelector(".icon");
+      bridge.getIcon(b.icon).then((res) => {
+        if (res && res.kind === "svg") iconEl.innerHTML = res.data;
+        else if (res && res.kind === "png") iconEl.innerHTML = `<img src="${res.data}" alt="">`;
+        else iconEl.textContent = b.icon;
+      });
+
+      /* 原生触控点按：按下即时反馈，松手触发；300ms 防重复 */
+      let pressing = false;
+
+      function disarm() {
+        el.classList.remove("armed");
+        el.dataset.armed = "";
+        const sub = el.querySelector(".sub");
+        if (sub) sub.textContent = b.sub;
+      }
+
+      async function fire() {
+        if (b.confirm && el.dataset.armed !== "1") {
+          el.dataset.armed = "1";
+          el.classList.add("armed");
+          const sub = el.querySelector(".sub");
+          if (sub) sub.textContent = "再点一次!";
+          setTimeout(disarm, behavior.confirmSeconds * 1000);
+          return;
+        }
+        disarm();
+        try {
+          const res = await bridge.press(b.id);
+          setLink(true);
+          if (!res.ok && res.reason === "unconfigured") {
+            el.classList.add("unconfigured");
+            setTimeout(() => el.classList.remove("unconfigured"), 350);
+          }
+        } catch {
+          setLink(false); // 断链红灯
+        }
+      }
+
+      el.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        wake();
+        if (pressing) return;
+        pressing = true;
+        el.classList.add("pressed");
+      });
+      el.addEventListener("pointerup", () => {
+        if (!pressing) return;
+        pressing = false;
+        setTimeout(() => el.classList.remove("pressed"), 450);
+        fire();
+      });
+      el.addEventListener("pointercancel", () => {
+        pressing = false;
+        el.classList.remove("pressed");
+      });
+      bar.appendChild(el);
+    }
+    wake();
+  }
+
+  render()
+    .then(() => setLink(true))
+    .catch((e) => {
+      setLink(false);
+      bar.innerHTML = `<div style="color:#aaa;padding:40px;font-size:16px">连不上服务器：${e.message}<br>确认 Windows 端 server.mjs 已启动</div>`;
+    });
+</script>
+</body>
+</html>

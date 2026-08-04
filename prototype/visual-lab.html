@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>TouchDeck 视觉实验室</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+
+  /* ===== 模拟桌面背景：让遮挡/透明度效果可判断 ===== */
+  #desktop {
+    position: fixed; inset: 0; padding: 24px;
+    background: linear-gradient(135deg, #2b3a4a 0%, #1a2634 50%, #243447 100%);
+    color: #8fa3b8; font-size: 15px; line-height: 1.9; overflow: hidden;
+  }
+  #desktop .fake-title { color: #c8d6e5; font-size: 20px; margin-bottom: 12px; }
+  #desktop .fake-code { font-family: Consolas, monospace; color: #7ec699; opacity: .8; }
+
+  /* ===== 控制面板（实验室专用，非产品 UI） ===== */
+  #lab {
+    position: fixed; top: 12px; left: 12px; z-index: 99;
+    background: rgba(20,20,24,.92); color: #ddd; border-radius: 12px;
+    padding: 14px 16px; font-size: 15px; max-width: 340px;
+    border: 1px solid #444;
+  }
+  #lab h1 { font-size: 16px; margin-bottom: 10px; color: #fff; }
+  #lab .row { margin: 8px 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  #lab .row > span { width: 64px; color: #999; flex-shrink: 0; }
+  #lab button {
+    background: #333; color: #ccc; border: 1px solid #555; border-radius: 8px;
+    padding: 10px 14px; font-size: 15px; cursor: pointer; min-width: 52px;
+  }
+  #lab button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+  #lab .hint { margin-top: 10px; font-size: 13px; color: #888; line-height: 1.6; }
+
+  /* ===== 工具条本体 ===== */
+  #bar {
+    position: fixed; z-index: 50;
+    display: grid; gap: 12px;
+    background: rgba(24, 24, 28, .92);
+    border-radius: 20px; padding: 14px;
+    border: 1px solid rgba(255,255,255,.08);
+    transition: opacity .5s ease;
+    cursor: grab;
+  }
+  #bar.dim { opacity: .3; }
+  #bar:not(.dim) { opacity: 1; }
+
+  .btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 16px; cursor: pointer; position: relative;
+    background: #2e2e36; color: #eee;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: 0 2px 0 rgba(0,0,0,.4);
+    transition: transform .08s, background .08s, filter .08s;
+  }
+  .btn .icon { font-size: 34px; line-height: 1.2; }
+  .btn .label { font-size: 20px; font-weight: 600; margin-top: 4px; }
+  .btn .sub { font-size: 13px; color: #999; margin-top: 2px; }
+
+  /* 分组配色 */
+  .btn.grp-voice  { background: #14532d; border-color: #22c55e55; }
+  .btn.grp-agent  { background: #1e3a5f; border-color: #3b82f655; }
+  .btn.grp-danger { background: #5f1e1e; border-color: #ef444455; }
+  .btn.grp-edit   { background: #2e2e36; }
+  .btn.grp-cmd    { background: #4a3a1e; border-color: #f59e0b55; }
+
+  /* 反馈样式 A：变色 + 下沉（停留 450ms） */
+  #bar.fb-a .btn.pressed { background: #f8fafc; color: #111; transform: translateY(3px) scale(.96); box-shadow: none; }
+  /* 反馈样式 B：放大描边发光 */
+  #bar.fb-b .btn.pressed { transform: scale(1.08); border-color: #facc15; box-shadow: 0 0 24px #facc15aa; z-index: 2; }
+  /* 反馈样式 C：对角打勾徽标 */
+  #bar.fb-c .btn.pressed { filter: brightness(1.6); }
+  #bar.fb-c .btn.pressed::after {
+    content: "✓"; position: absolute; top: 4px; right: 8px;
+    color: #4ade80; font-size: 26px; font-weight: 900;
+  }
+</style>
+</head>
+<body>
+
+<div id="desktop">
+  <div class="fake-title">这是模拟的桌面内容 —— 用来判断工具条遮挡与透明度</div>
+  <div>function main() {</div>
+  <div class="fake-code">&nbsp;&nbsp;const result = await agent.run(prompt);</div>
+  <div class="fake-code">&nbsp;&nbsp;if (result.ok) { console.log("done"); }</div>
+  <div>}</div>
+  <div>&nbsp;</div>
+  <div>隔着 UU 远程的视频流看这一页：文字是否清晰、按钮边缘是否发糊、</div>
+  <div>按下反馈能不能在 100ms+ 的链路延迟后依然明确可见。</div>
+  <div>把窗口下面的内容也当作「被工具条挡住的工作区」来感受遮挡程度。</div>
+  <div style="margin-top:40vh">↓ 工具条默认停靠在底部，拖动可以挪位置（松手即停靠）</div>
+</div>
+
+<div id="lab">
+  <h1>TouchDeck 视觉实验室</h1>
+  <div class="row"><span>尺寸</span>
+    <button data-k="size" data-v="s">小120</button>
+    <button data-k="size" data-v="m" class="on">中140</button>
+    <button data-k="size" data-v="l">大160</button>
+  </div>
+  <div class="row"><span>透明度</span>
+    <button data-k="op" data-v="1">100%</button>
+    <button data-k="op" data-v="0.92" class="on">92%</button>
+    <button data-k="op" data-v="0.8">80%</button>
+  </div>
+  <div class="row"><span>反馈</span>
+    <button data-k="fb" data-v="a" class="on">A变色</button>
+    <button data-k="fb" data-v="b">B发光</button>
+    <button data-k="fb" data-v="c">C打勾</button>
+  </div>
+  <div class="row"><span>布局</span>
+    <button data-k="ly" data-v="h" class="on">横2×6</button>
+    <button data-k="ly" data-v="v">竖6×2</button>
+    <button data-k="ly" data-v="g">块3×4</button>
+  </div>
+  <div class="row"><span>闲时</span>
+    <button data-k="dim" data-v="on" class="on">变暗开</button>
+    <button data-k="dim" data-v="off">变暗关</button>
+  </div>
+  <div class="hint">F11 全屏后在平板上点按感受。按钮按下会停留 450ms 再弹起（模拟真实链路里「看得见」的反馈）。闲时 5 秒无操作工具条变暗 30%，点任意处亮起。</div>
+</div>
+
+<div id="bar" class="fb-a"></div>
+
+<script>
+const BUTTONS = [
+  { icon: "🎤", label: "语音", sub: "微信输入法", grp: "grp-voice" },
+  { icon: "⚡", label: "Steer", sub: "Ctrl+S", grp: "grp-agent" },
+  { icon: "🛑", label: "中断", sub: "Esc", grp: "grp-danger" },
+  { icon: "📋", label: "Plan", sub: "Shift+Tab", grp: "grp-agent" },
+  { icon: "↩", label: "上条", sub: "↑", grp: "grp-agent" },
+  { icon: "⏎", label: "发送", sub: "Enter", grp: "grp-agent" },
+  { icon: "⏎+", label: "换行", sub: "Shift+Enter", grp: "grp-edit" },
+  { icon: "/", label: "命令", sub: "斜杠", grp: "grp-cmd" },
+  { icon: "@", label: "文件", sub: "引用", grp: "grp-cmd" },
+  { icon: "📄", label: "复制", sub: "Ctrl+C", grp: "grp-edit" },
+  { icon: "📥", label: "粘贴", sub: "Ctrl+V", grp: "grp-edit" },
+  { icon: "🗂", label: "折叠", sub: "Ctrl+O", grp: "grp-edit" },
+];
+
+const SIZES = { s: 120, m: 140, l: 160 };
+const state = { size: "m", op: "0.92", fb: "a", ly: "h", dim: "on" };
+
+const bar = document.getElementById("bar");
+
+function render() {
+  bar.innerHTML = "";
+  const px = SIZES[state.size];
+  bar.className = "fb-" + state.fb + (bar.classList.contains("dim") ? " dim" : "");
+  bar.style.background = `rgba(24,24,28,${state.op})`;
+
+  const cols = state.ly === "h" ? 6 : state.ly === "v" ? 2 : 4;
+  bar.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+  bar.style.gap = "12px";
+
+  for (const b of BUTTONS) {
+    const el = document.createElement("div");
+    el.className = "btn " + b.grp;
+    el.style.width = px + "px";
+    el.style.height = px + "px";
+    el.innerHTML = `<div class="icon">${b.icon}</div><div class="label">${b.label}</div><div class="sub">${b.sub}</div>`;
+    el.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      wake();
+      if (el.classList.contains("pressed")) return; // 防重复触发
+      el.classList.add("pressed");
+      setTimeout(() => el.classList.remove("pressed"), 450);
+    });
+    bar.appendChild(el);
+  }
+  dock();
+}
+
+function dock() {
+  // 停靠策略：横排底部居中 / 竖排右侧居中 / 块状右下
+  bar.style.left = ""; bar.style.right = ""; bar.style.top = ""; bar.style.bottom = "";
+  if (state.ly === "h") {
+    bar.style.left = "50%"; bar.style.transform = "translateX(-50%)";
+    bar.style.bottom = "24px";
+  } else if (state.ly === "v") {
+    bar.style.right = "24px"; bar.style.top = "50%";
+    bar.style.transform = "translateY(-50%)";
+  } else {
+    bar.style.right = "24px"; bar.style.bottom = "24px";
+  }
+}
+
+/* 闲时变暗 */
+let dimTimer = null;
+function wake() {
+  bar.classList.remove("dim");
+  if (state.dim !== "on") return;
+  clearTimeout(dimTimer);
+  dimTimer = setTimeout(() => bar.classList.add("dim"), 5000);
+}
+document.addEventListener("pointerdown", wake);
+
+/* 实验室控制 */
+document.querySelectorAll("#lab button").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const { k, v } = btn.dataset;
+    state[k] = v;
+    document.querySelectorAll(`#lab button[data-k="${k}"]`).forEach((b) => b.classList.toggle("on", b === btn));
+    render();
+    wake();
+  });
+});
+
+render();
+wake();
+</script>
+</body>
+</html>

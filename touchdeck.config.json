@@ -1,0 +1,11 @@
+{
+  "theme": "mono",
+  "layout": "left-dock",
+  "behavior": {
+    "idleDimSeconds": 5,
+    "confirmSeconds": 2.5,
+    "dragHoldMs": 500
+  },
+  "themeOverrides": {},
+  "layoutOverrides": {}
+}

@@ -1,0 +1,55 @@
+{
+  "name": "单色描边（AI 生成图标）",
+  "description": "默认深色皮肤 + Grsai 生成的统一描边图标集（themes/mono/icons/*.png）",
+  "bar": {
+    "backgroundRgb": "24, 24, 28",
+    "opacity": 0.92,
+    "idleDimOpacity": 0.6,
+    "borderRadius": 20,
+    "borderColor": "rgba(255,255,255,0.08)"
+  },
+  "button": {
+    "background": "#2e2e36",
+    "color": "#eeeeee",
+    "subColor": "#999999",
+    "borderRadius": 16,
+    "borderColor": "rgba(255,255,255,0.10)",
+    "iconSize": 32,
+    "labelSize": 19,
+    "subSize": 12
+  },
+  "groups": {
+    "voice": {
+      "background": "#14532d",
+      "borderColor": "rgba(34,197,94,0.33)"
+    },
+    "agent": {
+      "background": "#1e3a5f",
+      "borderColor": "rgba(59,130,246,0.33)"
+    },
+    "danger": {
+      "background": "#5f1e1e",
+      "borderColor": "rgba(239,68,68,0.33)"
+    },
+    "cmd": {
+      "background": "#4a3a1e",
+      "borderColor": "rgba(245,158,11,0.33)"
+    },
+    "edit": {
+      "background": "#2e2e36",
+      "borderColor": "rgba(255,255,255,0.10)"
+    }
+  },
+  "pressed": {
+    "background": "#f8fafc",
+    "color": "#111111",
+    "subColor": "#555555"
+  },
+  "armed": {
+    "background": "#713f12",
+    "color": "#fde047",
+    "subColor": "#fde047",
+    "borderColor": "#facc15",
+    "glowColor": "rgba(250,204,21,0.67)"
+  }
+}

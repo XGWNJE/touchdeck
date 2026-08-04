@@ -1,0 +1,1190 @@
+{
+  "behavior": {
+    "confirmSeconds": 2.5
+  },
+  "layout": {
+    "columns": 2,
+    "gap": 6,
+    "padding": 7,
+    "buttonSize": 60,
+    "showLabel": true,
+    "showSub": false
+  },
+  "theme": {
+    "name": "单色描边（AI 生成图标）",
+    "description": "默认深色皮肤 + Grsai 生成的统一描边图标集（themes/mono/icons/*.png）",
+    "bar": {
+      "backgroundRgb": "24, 24, 28",
+      "opacity": 0.92,
+      "idleDimOpacity": 0.6,
+      "borderRadius": 10,
+      "borderColor": "rgba(255,255,255,0.08)"
+    },
+    "button": {
+      "background": "#2e2e36",
+      "color": "#eeeeee",
+      "subColor": "#999999",
+      "borderRadius": 8,
+      "borderColor": "rgba(255,255,255,0.10)",
+      "iconSize": 16,
+      "labelSize": 10,
+      "subSize": 6
+    },
+    "groups": {
+      "voice": {
+        "background": "#14532d",
+        "borderColor": "rgba(34,197,94,0.33)"
+      },
+      "agent": {
+        "background": "#1e3a5f",
+        "borderColor": "rgba(59,130,246,0.33)"
+      },
+      "danger": {
+        "background": "#5f1e1e",
+        "borderColor": "rgba(239,68,68,0.33)"
+      },
+      "cmd": {
+        "background": "#4a3a1e",
+        "borderColor": "rgba(245,158,11,0.33)"
+      },
+      "edit": {
+        "background": "#2e2e36",
+        "borderColor": "rgba(255,255,255,0.10)"
+      }
+    },
+    "pressed": {
+      "background": "#f8fafc",
+      "color": "#111111",
+      "subColor": "#555555"
+    },
+    "armed": {
+      "background": "#713f12",
+      "color": "#fde047",
+      "subColor": "#fde047",
+      "borderColor": "#facc15",
+      "glowColor": "rgba(250,204,21,0.67)"
+    }
+  },
+  "buttons": [
+    {
+      "id": "fill01",
+      "icon": "mic",
+      "label": "测01",
+      "sub": "T01",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill02",
+      "icon": "zap",
+      "label": "测02",
+      "sub": "T02",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill03",
+      "icon": "hand",
+      "label": "测03",
+      "sub": "T03",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill04",
+      "icon": "send",
+      "label": "测04",
+      "sub": "T04",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill05",
+      "icon": "delete",
+      "label": "测05",
+      "sub": "T05",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill06",
+      "icon": "slash",
+      "label": "测06",
+      "sub": "T06",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill07",
+      "icon": "clipboard-list",
+      "label": "测07",
+      "sub": "T07",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill08",
+      "icon": "square-dashed",
+      "label": "测08",
+      "sub": "T08",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill09",
+      "icon": "corner-down-left",
+      "label": "测09",
+      "sub": "T09",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill10",
+      "icon": "at-sign",
+      "label": "测10",
+      "sub": "T10",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill11",
+      "icon": "copy",
+      "label": "测11",
+      "sub": "T11",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill12",
+      "icon": "clipboard-paste",
+      "label": "测12",
+      "sub": "T12",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill13",
+      "icon": "mic",
+      "label": "测13",
+      "sub": "T13",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill14",
+      "icon": "zap",
+      "label": "测14",
+      "sub": "T14",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill15",
+      "icon": "hand",
+      "label": "测15",
+      "sub": "T15",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill16",
+      "icon": "send",
+      "label": "测16",
+      "sub": "T16",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill17",
+      "icon": "delete",
+      "label": "测17",
+      "sub": "T17",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill18",
+      "icon": "slash",
+      "label": "测18",
+      "sub": "T18",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill19",
+      "icon": "clipboard-list",
+      "label": "测19",
+      "sub": "T19",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill20",
+      "icon": "square-dashed",
+      "label": "测20",
+      "sub": "T20",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill21",
+      "icon": "corner-down-left",
+      "label": "测21",
+      "sub": "T21",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill22",
+      "icon": "at-sign",
+      "label": "测22",
+      "sub": "T22",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill23",
+      "icon": "copy",
+      "label": "测23",
+      "sub": "T23",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill24",
+      "icon": "clipboard-paste",
+      "label": "测24",
+      "sub": "T24",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill25",
+      "icon": "mic",
+      "label": "测25",
+      "sub": "T25",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill26",
+      "icon": "zap",
+      "label": "测26",
+      "sub": "T26",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill27",
+      "icon": "hand",
+      "label": "测27",
+      "sub": "T27",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill28",
+      "icon": "send",
+      "label": "测28",
+      "sub": "T28",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill29",
+      "icon": "delete",
+      "label": "测29",
+      "sub": "T29",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill30",
+      "icon": "slash",
+      "label": "测30",
+      "sub": "T30",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill31",
+      "icon": "clipboard-list",
+      "label": "测31",
+      "sub": "T31",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill32",
+      "icon": "square-dashed",
+      "label": "测32",
+      "sub": "T32",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill33",
+      "icon": "corner-down-left",
+      "label": "测33",
+      "sub": "T33",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill34",
+      "icon": "at-sign",
+      "label": "测34",
+      "sub": "T34",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill35",
+      "icon": "copy",
+      "label": "测35",
+      "sub": "T35",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill36",
+      "icon": "clipboard-paste",
+      "label": "测36",
+      "sub": "T36",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill37",
+      "icon": "mic",
+      "label": "测37",
+      "sub": "T37",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill38",
+      "icon": "zap",
+      "label": "测38",
+      "sub": "T38",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill39",
+      "icon": "hand",
+      "label": "测39",
+      "sub": "T39",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill40",
+      "icon": "send",
+      "label": "测40",
+      "sub": "T40",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill41",
+      "icon": "delete",
+      "label": "测41",
+      "sub": "T41",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill42",
+      "icon": "slash",
+      "label": "测42",
+      "sub": "T42",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill43",
+      "icon": "clipboard-list",
+      "label": "测43",
+      "sub": "T43",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill44",
+      "icon": "square-dashed",
+      "label": "测44",
+      "sub": "T44",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill45",
+      "icon": "corner-down-left",
+      "label": "测45",
+      "sub": "T45",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill46",
+      "icon": "at-sign",
+      "label": "测46",
+      "sub": "T46",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill47",
+      "icon": "copy",
+      "label": "测47",
+      "sub": "T47",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill48",
+      "icon": "clipboard-paste",
+      "label": "测48",
+      "sub": "T48",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill49",
+      "icon": "mic",
+      "label": "测49",
+      "sub": "T49",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill50",
+      "icon": "zap",
+      "label": "测50",
+      "sub": "T50",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill51",
+      "icon": "hand",
+      "label": "测51",
+      "sub": "T51",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill52",
+      "icon": "send",
+      "label": "测52",
+      "sub": "T52",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill53",
+      "icon": "delete",
+      "label": "测53",
+      "sub": "T53",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill54",
+      "icon": "slash",
+      "label": "测54",
+      "sub": "T54",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill55",
+      "icon": "clipboard-list",
+      "label": "测55",
+      "sub": "T55",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill56",
+      "icon": "square-dashed",
+      "label": "测56",
+      "sub": "T56",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill57",
+      "icon": "corner-down-left",
+      "label": "测57",
+      "sub": "T57",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill58",
+      "icon": "at-sign",
+      "label": "测58",
+      "sub": "T58",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill59",
+      "icon": "copy",
+      "label": "测59",
+      "sub": "T59",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill60",
+      "icon": "clipboard-paste",
+      "label": "测60",
+      "sub": "T60",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill61",
+      "icon": "mic",
+      "label": "测61",
+      "sub": "T61",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill62",
+      "icon": "zap",
+      "label": "测62",
+      "sub": "T62",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill63",
+      "icon": "hand",
+      "label": "测63",
+      "sub": "T63",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill64",
+      "icon": "send",
+      "label": "测64",
+      "sub": "T64",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill65",
+      "icon": "delete",
+      "label": "测65",
+      "sub": "T65",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill66",
+      "icon": "slash",
+      "label": "测66",
+      "sub": "T66",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill67",
+      "icon": "clipboard-list",
+      "label": "测67",
+      "sub": "T67",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill68",
+      "icon": "square-dashed",
+      "label": "测68",
+      "sub": "T68",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill69",
+      "icon": "corner-down-left",
+      "label": "测69",
+      "sub": "T69",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill70",
+      "icon": "at-sign",
+      "label": "测70",
+      "sub": "T70",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill71",
+      "icon": "copy",
+      "label": "测71",
+      "sub": "T71",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill72",
+      "icon": "clipboard-paste",
+      "label": "测72",
+      "sub": "T72",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill73",
+      "icon": "mic",
+      "label": "测73",
+      "sub": "T73",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill74",
+      "icon": "zap",
+      "label": "测74",
+      "sub": "T74",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill75",
+      "icon": "hand",
+      "label": "测75",
+      "sub": "T75",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill76",
+      "icon": "send",
+      "label": "测76",
+      "sub": "T76",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill77",
+      "icon": "delete",
+      "label": "测77",
+      "sub": "T77",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill78",
+      "icon": "slash",
+      "label": "测78",
+      "sub": "T78",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill79",
+      "icon": "clipboard-list",
+      "label": "测79",
+      "sub": "T79",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill80",
+      "icon": "square-dashed",
+      "label": "测80",
+      "sub": "T80",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill81",
+      "icon": "corner-down-left",
+      "label": "测81",
+      "sub": "T81",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill82",
+      "icon": "at-sign",
+      "label": "测82",
+      "sub": "T82",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill83",
+      "icon": "copy",
+      "label": "测83",
+      "sub": "T83",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill84",
+      "icon": "clipboard-paste",
+      "label": "测84",
+      "sub": "T84",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill85",
+      "icon": "mic",
+      "label": "测85",
+      "sub": "T85",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill86",
+      "icon": "zap",
+      "label": "测86",
+      "sub": "T86",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill87",
+      "icon": "hand",
+      "label": "测87",
+      "sub": "T87",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill88",
+      "icon": "send",
+      "label": "测88",
+      "sub": "T88",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill89",
+      "icon": "delete",
+      "label": "测89",
+      "sub": "T89",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill90",
+      "icon": "slash",
+      "label": "测90",
+      "sub": "T90",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill91",
+      "icon": "clipboard-list",
+      "label": "测91",
+      "sub": "T91",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill92",
+      "icon": "square-dashed",
+      "label": "测92",
+      "sub": "T92",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill93",
+      "icon": "corner-down-left",
+      "label": "测93",
+      "sub": "T93",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill94",
+      "icon": "at-sign",
+      "label": "测94",
+      "sub": "T94",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill95",
+      "icon": "copy",
+      "label": "测95",
+      "sub": "T95",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill96",
+      "icon": "clipboard-paste",
+      "label": "测96",
+      "sub": "T96",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill97",
+      "icon": "mic",
+      "label": "测97",
+      "sub": "T97",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill98",
+      "icon": "zap",
+      "label": "测98",
+      "sub": "T98",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill99",
+      "icon": "hand",
+      "label": "测99",
+      "sub": "T99",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill100",
+      "icon": "send",
+      "label": "测100",
+      "sub": "T100",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill101",
+      "icon": "delete",
+      "label": "测101",
+      "sub": "T101",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill102",
+      "icon": "slash",
+      "label": "测102",
+      "sub": "T102",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill103",
+      "icon": "clipboard-list",
+      "label": "测103",
+      "sub": "T103",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill104",
+      "icon": "square-dashed",
+      "label": "测104",
+      "sub": "T104",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill105",
+      "icon": "corner-down-left",
+      "label": "测105",
+      "sub": "T105",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill106",
+      "icon": "at-sign",
+      "label": "测106",
+      "sub": "T106",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill107",
+      "icon": "copy",
+      "label": "测107",
+      "sub": "T107",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill108",
+      "icon": "clipboard-paste",
+      "label": "测108",
+      "sub": "T108",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill109",
+      "icon": "mic",
+      "label": "测109",
+      "sub": "T109",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill110",
+      "icon": "zap",
+      "label": "测110",
+      "sub": "T110",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill111",
+      "icon": "hand",
+      "label": "测111",
+      "sub": "T111",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill112",
+      "icon": "send",
+      "label": "测112",
+      "sub": "T112",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill113",
+      "icon": "delete",
+      "label": "测113",
+      "sub": "T113",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill114",
+      "icon": "slash",
+      "label": "测114",
+      "sub": "T114",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill115",
+      "icon": "clipboard-list",
+      "label": "测115",
+      "sub": "T115",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill116",
+      "icon": "square-dashed",
+      "label": "测116",
+      "sub": "T116",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill117",
+      "icon": "corner-down-left",
+      "label": "测117",
+      "sub": "T117",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill118",
+      "icon": "at-sign",
+      "label": "测118",
+      "sub": "T118",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill119",
+      "icon": "copy",
+      "label": "测119",
+      "sub": "T119",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill120",
+      "icon": "clipboard-paste",
+      "label": "测120",
+      "sub": "T120",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill121",
+      "icon": "mic",
+      "label": "测121",
+      "sub": "T121",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill122",
+      "icon": "zap",
+      "label": "测122",
+      "sub": "T122",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill123",
+      "icon": "hand",
+      "label": "测123",
+      "sub": "T123",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill124",
+      "icon": "send",
+      "label": "测124",
+      "sub": "T124",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill125",
+      "icon": "delete",
+      "label": "测125",
+      "sub": "T125",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill126",
+      "icon": "slash",
+      "label": "测126",
+      "sub": "T126",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill127",
+      "icon": "clipboard-list",
+      "label": "测127",
+      "sub": "T127",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill128",
+      "icon": "square-dashed",
+      "label": "测128",
+      "sub": "T128",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill129",
+      "icon": "corner-down-left",
+      "label": "测129",
+      "sub": "T129",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill130",
+      "icon": "at-sign",
+      "label": "测130",
+      "sub": "T130",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill131",
+      "icon": "copy",
+      "label": "测131",
+      "sub": "T131",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill132",
+      "icon": "clipboard-paste",
+      "label": "测132",
+      "sub": "T132",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill133",
+      "icon": "mic",
+      "label": "测133",
+      "sub": "T133",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill134",
+      "icon": "zap",
+      "label": "测134",
+      "sub": "T134",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill135",
+      "icon": "hand",
+      "label": "测135",
+      "sub": "T135",
+      "group": "cmd",
+      "confirm": false
+    },
+    {
+      "id": "fill136",
+      "icon": "send",
+      "label": "测136",
+      "sub": "T136",
+      "group": "voice",
+      "confirm": false
+    },
+    {
+      "id": "fill137",
+      "icon": "delete",
+      "label": "测137",
+      "sub": "T137",
+      "group": "agent",
+      "confirm": false
+    },
+    {
+      "id": "fill138",
+      "icon": "slash",
+      "label": "测138",
+      "sub": "T138",
+      "group": "danger",
+      "confirm": false
+    },
+    {
+      "id": "fill139",
+      "icon": "clipboard-list",
+      "label": "测139",
+      "sub": "T139",
+      "group": "edit",
+      "confirm": false
+    },
+    {
+      "id": "fill140",
+      "icon": "square-dashed",
+      "label": "测140",
+      "sub": "T140",
+      "group": "cmd",
+      "confirm": false
+    }
+  ]
+}

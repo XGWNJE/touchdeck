@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TouchDeck 悬浮球</string>
+    <string name="label_server">服务器地址</string>
+    <string name="btn_start">启动悬浮球</string>
+    <string name="btn_stop">停止悬浮球</string>
+    <string name="btn_grant">去授权悬浮窗权限</string>
+    <string name="status_running">悬浮球运行中</string>
+    <string name="status_stopped">悬浮球已停止</string>
+    <string name="status_no_permission">未授权悬浮窗权限，无法启动</string>
+    <string name="channel_name">悬浮球服务</string>
+    <string name="notification_text">悬浮球正在运行</string>
+</resources>

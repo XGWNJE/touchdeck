@@ -1,0 +1,30 @@
+{
+  "name": "浅色纸面",
+  "description": "浅色主题示例：演示主题包格式与 DIY 入口",
+  "bar": {
+    "backgroundRgb": "245, 245, 242",
+    "opacity": 0.95,
+    "idleDimOpacity": 0.55,
+    "borderRadius": 20,
+    "borderColor": "rgba(0,0,0,0.12)"
+  },
+  "button": {
+    "background": "#ffffff",
+    "color": "#1c1c1e",
+    "subColor": "#6b7280",
+    "borderRadius": 16,
+    "borderColor": "rgba(0,0,0,0.10)",
+    "iconSize": 32,
+    "labelSize": 19,
+    "subSize": 12
+  },
+  "groups": {
+    "voice":  { "background": "#dcfce7", "borderColor": "rgba(22,163,74,0.4)" },
+    "agent":  { "background": "#dbeafe", "borderColor": "rgba(37,99,235,0.4)" },
+    "danger": { "background": "#fee2e2", "borderColor": "rgba(220,38,38,0.4)" },
+    "cmd":    { "background": "#fef3c7", "borderColor": "rgba(217,119,6,0.4)" },
+    "edit":   { "background": "#ffffff", "borderColor": "rgba(0,0,0,0.10)" }
+  },
+  "pressed": { "background": "#1c1c1e", "color": "#fafafa", "subColor": "#d1d5db" },
+  "armed":   { "background": "#fde047", "color": "#713f12", "subColor": "#713f12", "borderColor": "#eab308", "glowColor": "rgba(234,179,8,0.6)" }
+}
