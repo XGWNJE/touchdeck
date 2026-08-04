@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #17171b; color: #e8e8ea; padding: 18px;
+    -webkit-user-select: none; user-select: none;
+  }
+  h1 { font-size: 19px; margin-bottom: 2px; }
+  .sub { color: #888; font-size: 12px; margin-bottom: 14px; }
+
+  /* 顶部状态总览 */
+  #overview {
+    display: flex; gap: 18px; background: #1e1e24; border: 1px solid #33333a;
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;
+  }
+  .ov-item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #ccc; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; flex: none; }
+  .dot.ok { background: #4ade80; box-shadow: 0 0 7px #4ade80; }
+
+  .card {
+    background: #222228; border: 1px solid #33333a; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 14px; margin-bottom: 4px; font-weight: 600; }
+  .card .desc { color: #888; font-size: 12px; margin-bottom: 10px; line-height: 1.6; }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .row:last-child { margin-bottom: 0; }
+  .label { color: #ccc; flex: 1; font-size: 13px; }
+  .mono { font-family: Consolas, monospace; font-size: 12px; color: #9ac8ff; word-break: break-all; }
+
+  button {
+    background: #2f6fed; border: none; color: #fff; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: #3d7dff; }
+  button.secondary { background: #3a3a42; }
+  button.secondary:hover { background: #4a4a54; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.main { padding: 11px 20px; font-size: 14px; font-weight: 600; }
+
+  .seg { display: flex; gap: 8px; margin-bottom: 8px; }
+  .seg button { flex: 1; background: #3a3a42; }
+  .seg button.active { background: #2f6fed; }
+  .seg-row { display: flex; align-items: center; gap: 10px; }
+  .seg-row .seg { flex: 1; margin-bottom: 0; }
+
+  .addr { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    background: #1b1b20; border: 1px solid #33333a; border-radius: 8px;
+    margin-bottom: 6px; cursor: pointer; }
+  .addr:hover { border-color: #4a4a55; }
+  .addr .tag { color: #888; font-size: 12px; width: 64px; flex: none; }
+  .addr .mono { flex: 1; }
+  .addr .copy-hint { color: #4ade80; font-size: 12px; flex: none; display: none; }
+
+  #advToggle { color: #9ac8ff; font-size: 13px; padding: 6px 0; cursor: pointer; }
+  #advBody { display: none; margin-top: 8px; }
+  #advBody.open { display: block; }
+  #tokenBox { display: flex; gap: 8px; align-items: center; }
+  #token { flex: 1; font-family: Consolas, monospace; font-size: 13px;
+    color: #9ac8ff; background: #1b1b20; border: 1px solid #33333a;
+    border-radius: 6px; padding: 8px 10px; word-break: break-all; line-height: 1.5; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: rgba(40, 40, 46, .95); color: #fff; font-size: 13px; padding: 8px 14px;
+    border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>TouchDeck 控制台</h1>
+<div class="sub">本机面板 + P2P 远程连接的统一入口</div>
+
+<div id="overview">
+  <div class="ov-item"><div class="dot" id="ovP2P"></div><span id="ovP2PT">P2P 直连…</span></div>
+  <div class="ov-item"><div class="dot" id="ovPanel"></div><span id="ovPanelT">面板…</span></div>
+</div>
+
+<div class="card">
+  <h2>本机面板</h2>
+  <div class="desc">悬浮球 / 网格快捷键面板。远程端（手机、平板）在用时，可关闭本机面板避免重复。</div>
+  <div class="row">
+    <span class="label" id="panelState">…</span>
+    <button id="panelBtn" class="main">…</button>
+  </div>
+  <div class="seg-row">
+    <span class="label" style="flex:none;width:48px">形态</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="bubble">悬浮球</button>
+      <button data-mode="grid">网格面板</button>
+    </div>
+  </div>
+  <div class="seg-row">
+    <span class="label" style="flex:none;width:48px">交互</span>
+    <div class="seg" id="inputSeg">
+      <button data-input="mouse">键鼠</button>
+      <button data-input="touch">触控</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>远程连接（P2P 直连）</h2>
+  <div class="desc">手机 App 输入房间码即可直连本机，不经过公网转发。</div>
+  <div class="row">
+    <div class="dot" id="p2pDot"></div>
+    <span class="label" id="p2pState">未开启</span>
+    <button id="p2pBtn" class="main">开启连接</button>
+  </div>
+  <div class="addr" id="addrRoom" title="点击复制房间码" style="display:none">
+    <span class="tag">房间码</span>
+    <span class="mono" id="roomCode">…</span>
+    <span class="copy-hint">已复制</span>
+  </div>
+  <div class="hint" id="p2pHint" style="color:#888;font-size:12px">开启后手机 App 点「P2P 连接」并输入房间码，即与本机直连。</div>
+</div>
+
+<div id="toast"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let toastTimer = null;
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 1500);
+  }
+  async function copyText(text, hintEl) {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (hintEl) {
+        hintEl.style.display = "inline";
+        setTimeout(() => (hintEl.style.display = "none"), 1200);
+      } else {
+        toast("已复制");
+      }
+    } catch {
+      toast("复制失败");
+    }
+  }
+
+  async function refresh() {
+    const s = await window.touchdeck.consoleStatus();
+    // 状态总览
+    $("ovPanel").classList.toggle("ok", s.panelRunning);
+    $("ovPanelT").textContent = "面板 " + (s.panelRunning ? "运行中" : "已关闭");
+    // 本机面板
+    $("panelState").textContent = s.panelRunning ? "运行中" : (s.panelDisabled ? "已关闭" : "未运行");
+    $("panelBtn").textContent = s.panelRunning ? "关闭面板" : "开启面板";
+    $("panelBtn").disabled = false;
+    document.querySelectorAll("#modeSeg button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.mode === s.mode);
+    });
+    document.querySelectorAll("#inputSeg button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.input === s.input);
+    });
+    // P2P 状态（主进程推送或轮询兜底）
+    const ps = await window.touchdeck.peerStatusGet();
+    renderP2P(ps);
+  }
+
+  function renderP2P(ps) {
+    const dot = $("p2pDot");
+    const label = $("p2pState");
+    const btn = $("p2pBtn");
+    const room = $("addrRoom");
+    $("roomCode").textContent = ps.code || "…";
+    room.style.display = ps.code ? "flex" : "none";
+    const ov = $("ovP2P");
+    const ovT = $("ovP2PT");
+    const isLive = ps.phase === "connected" || ps.phase === "peer-joined" || ps.phase === "room" || ps.phase === "connecting";
+    ov.classList.toggle("ok", ps.phase === "connected");
+    ovT.textContent = "P2P " + (ps.phase === "connected" ? "已直连" : (isLive ? "连接中" : "未开启"));
+    switch (ps.phase) {
+      case "connecting":
+        dot.classList.remove("ok"); label.textContent = "连接信令中…"; btn.textContent = "关闭连接"; break;
+      case "room":
+        dot.classList.remove("ok"); label.textContent = "等待手机加入（30 分钟有效）"; btn.textContent = "关闭连接"; break;
+      case "peer-joined":
+        dot.classList.remove("ok"); label.textContent = "手机已加入，正在建立直连…"; btn.textContent = "关闭连接"; break;
+      case "connected":
+        dot.classList.add("ok"); label.textContent = ps.peers > 1 ? `已直连（${ps.peers} 台设备）` : "已直连（按键将不走公网转发）"; btn.textContent = "关闭连接"; break;
+      case "signal-error":
+        dot.classList.remove("ok"); label.textContent = "信令连接失败"; btn.textContent = "重试开启"; break;
+      case "disconnected":
+        dot.classList.remove("ok"); label.textContent = "已断开"; btn.textContent = "重新开启"; break;
+      case "reconnecting":
+        dot.classList.remove("ok"); label.textContent = "信令断线，自动重连中…"; btn.textContent = "关闭连接"; break;
+      default:
+        dot.classList.remove("ok"); label.textContent = "未开启"; btn.textContent = "开启连接";
+    }
+  }
+
+  $("panelBtn").addEventListener("click", async () => {
+    $("panelBtn").disabled = true;
+    await window.touchdeck.consoleTogglePanel();
+    refresh();
+  });
+  document.querySelectorAll("#modeSeg button").forEach((b) => {
+    b.addEventListener("click", async () => {
+      await window.touchdeck.consoleSetMode(b.dataset.mode);
+      refresh();
+    });
+  });
+  document.querySelectorAll("#inputSeg button").forEach((b) => {
+    b.addEventListener("click", async () => {
+      await window.touchdeck.consoleSetInput(b.dataset.input);
+      refresh();
+    });
+  });
+  $("p2pBtn").addEventListener("click", async () => {
+    $("p2pBtn").disabled = true;
+    const ps = await window.touchdeck.peerStatusGet();
+    if (ps && (ps.phase === "room" || ps.phase === "connecting" || ps.phase === "peer-joined" || ps.phase === "connected")) {
+      await window.touchdeck.peerStop();
+    } else {
+      await window.touchdeck.peerStart();
+    }
+    refresh();
+  });
+  $("addrRoom").addEventListener("click", () => {
+    copyText($("roomCode").textContent, $("addrRoom").querySelector(".copy-hint"));
+  });
+  window.touchdeck.onPeerStatus((ps) => renderP2P(ps));
+
+  refresh();
+  setInterval(refresh, 4000);
+</script>
+</body>
+</html>

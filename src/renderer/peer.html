@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+</head>
+<body>
+<script>
+// P2P 中继（隐藏窗口）：Windows 端 = 房间 host。
+// 连接信令 → 建房间（控制台显示房间码）→ 等 client（安卓）加入 →
+// host 创建 DataChannel → 收到按键消息 {id} → IPC 主进程本地注入。
+// 打洞失败（对称 NAT）由 TURN 兜底；所有信令/媒体经 DTLS 加密。
+const SIGNAL_DEFAULT = "wss://api.xgwnje.cn/signal";
+
+let ws = null;
+let roomCode = null;
+let turnCfg = null;
+let stopped = true;
+// 多客户端：clientId -> { pc, channel }（每台手机一条独立 WebRTC 连接）
+const peers = new Map();
+
+function postStatus(payload) {
+  window.touchdeck.peerStatus(payload);
+}
+
+async function connectSignal(url) {
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    postStatus({ phase: "signal-ok" });
+    ws.send(JSON.stringify({ type: "create-room" }));
+  };
+  ws.onmessage = (e) => handleSignal(JSON.parse(e.data));
+  ws.onclose = () => {
+    // 断线自动重连：半开连接（VPN/网络切换）会静默僵死，
+    // 重启控制台才恢复的旧问题就出在这——现在自动重建信令并换新房间码
+    postStatus({ phase: "reconnecting" });
+    teardownPeer();
+    if (!stopped) setTimeout(() => connectSignal(url), 2000);
+  };
+  ws.onerror = () => { try { ws.close(); } catch { /* 交给 onclose 重连 */ } };
+}
+
+function handleSignal(msg) {
+  if (msg.type === "room") {
+    roomCode = msg.code;
+    turnCfg = msg.turn;
+    postStatus({ phase: "room", code: roomCode });
+    return;
+  }
+  if (msg.type === "peer") {
+    // 新客户端加入：host 侧为它创建独立连接并等待该 client 的 offer
+    postStatus({ phase: "peer-joined" });
+    setupPeer(msg.clientId);
+    return;
+  }
+  if (msg.type === "signal") {
+    const clientId = msg.from;
+    if (!clientId) return;
+    if (!peers.has(clientId)) setupPeer(clientId);
+    handlePeerSignal(clientId, msg.data);
+    return;
+  }
+  if (msg.type === "peer-left") {
+    if (msg.clientId) teardownPeer(msg.clientId);
+    else teardownAll();
+    postStatus({ phase: "room", code: roomCode, peers: peers.size });
+    return;
+  }
+}
+
+function iceServers() {
+  const list = [
+    { urls: "stun:212.135.41.88:3478" },
+  ];
+  if (turnCfg) {
+    list.push({ urls: turnCfg.urls || [turnCfg.url], username: turnCfg.username, credential: turnCfg.credential });
+  }
+  return list;
+}
+
+function setupPeer(clientId) {
+  if (peers.has(clientId)) return;
+  const pc = new RTCPeerConnection({ iceServers: iceServers() });
+  peers.set(clientId, { pc, channel: null });
+  pc.onicecandidate = (e) => {
+    if (e.candidate) ws.send(JSON.stringify({ type: "signal", to: clientId, data: { ice: e.candidate } }));
+  };
+  pc.onconnectionstatechange = () => {
+    postStatus({ phase: "peer-state", state: pc.connectionState });
+  };
+  pc.ondatachannel = (e) => {
+    const p = peers.get(clientId);
+    if (!p) return;
+    p.channel = e.channel;
+    bindChannel(p);
+  };
+}
+
+function bindChannel(p) {
+  p.channel.onopen = () => postStatus({ phase: "connected", peers: peers.size });
+  p.channel.onclose = () => {
+    postStatus({ phase: "peer-joined", peers: peers.size });
+  };
+  p.channel.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      console.log("peer msg:", JSON.stringify(msg));
+      if (msg && msg.id) window.touchdeck.peerPress(msg.id);
+    } catch { /* 非 JSON 忽略 */ }
+  };
+}
+
+function handlePeerSignal(clientId, data) {
+  const p = peers.get(clientId);
+  if (!p || !p.pc) return;
+  if (data.sdp && data.sdp.type === "offer") {
+    p.pc.setRemoteDescription(data.sdp).then(async () => {
+      const answer = await p.pc.createAnswer();
+      await p.pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({ type: "signal", to: clientId, data: { sdp: p.pc.localDescription } }));
+    }).catch((err) => postStatus({ phase: "peer-error", error: String(err) }));
+  } else if (data.ice) {
+    p.pc.addIceCandidate(data.ice).catch((err) => postStatus({ phase: "peer-error", error: String(err) }));
+  }
+}
+
+function teardownPeer(clientId) {
+  const p = peers.get(clientId);
+  if (!p) return;
+  try { if (p.channel) p.channel.close(); } catch {}
+  try { if (p.pc) p.pc.close(); } catch {}
+  peers.delete(clientId);
+}
+
+function teardownAll() {
+  for (const clientId of Array.from(peers.keys())) teardownPeer(clientId);
+}
+
+window.touchdeck.onPeerStart((signalUrl) => {
+  const url = (signalUrl && signalUrl.trim()) || SIGNAL_DEFAULT;
+  stopped = false;
+  if (ws && ws.readyState <= 1) ws.close();
+  teardownAll();
+  connectSignal(url);
+});
+
+window.touchdeck.onPeerStop(() => {
+  stopped = true;
+  try { if (ws) ws.close(); } catch {}
+  teardownAll();
+  roomCode = null;
+  postStatus({ phase: "idle" });
+});
+</script>
+</body>
+</html>

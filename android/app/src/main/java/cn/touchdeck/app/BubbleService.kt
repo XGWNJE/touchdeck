@@ -60,6 +60,9 @@ class BubbleService : Service() {
     private var screenH = 0
     private var bubbleSize = 0
 
+    // 通讯：P2P 直连（DataChannel 按键），配置/图标全部来自离线 assets
+    private var panelConfig: JSONObject? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -307,8 +310,6 @@ class BubbleService : Service() {
 
     // ---- panel（原生 View 网格；数据来自 assets/panel.json，由 scripts/build-panel-assets.mjs 从配置包生成） ----
 
-    private var panelConfig: JSONObject? = null
-
     private fun loadPanelConfig(): JSONObject =
         panelConfig ?: JSONObject(assets.open("panel.json").bufferedReader().readText()).also { panelConfig = it }
 
@@ -325,6 +326,14 @@ class BubbleService : Service() {
     }
 
     private val iconBitmaps = HashMap<String, Bitmap>()
+
+    /** 图标优先级：离线 assets PNG → 无（文字回退） */
+    private fun resolveIconBitmap(name: String): Bitmap? {
+        if (name.isEmpty()) return null
+        return iconBitmaps[name] ?: runCatching {
+            assets.open("icons/$name.png").use { BitmapFactory.decodeStream(it) }
+        }.getOrNull()?.also { iconBitmaps[name] = it }
+    }
 
     private fun expandPanel(skipBubbleRetop: Boolean = false) {
         if (panelExpanded) return
@@ -343,11 +352,7 @@ class BubbleService : Service() {
             val group = groups?.optJSONObject(b.optString("group", "edit"))
             val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
             val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
-            val iconName = b.optString("icon", "")
-            val bmp = iconBitmaps[iconName] ?: runCatching {
-                assets.open("icons/$iconName.png").use { BitmapFactory.decodeStream(it) }
-            }.getOrNull()?.also { iconBitmaps[iconName] = it }
-            items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", iconName), bmp, bg, accent))
+            items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", b.optString("icon", "")), resolveIconBitmap(b.optString("icon", "")), bg, accent))
         }
 
         val cxScreen = (bubbleParams?.x ?: 0) + bubbleSize / 2f
@@ -391,9 +396,9 @@ class BubbleService : Service() {
                     android.util.Log.d("TouchDeck", "dismiss (release outside)")
                     collapsePanel()
                 },
-                onSelect = { _, label ->
-                    android.util.Log.d("TouchDeck", "onSelect label=$label")
-                    flashLabel("演示：$label")
+                onSelect = { id, label ->
+                    android.util.Log.d("TouchDeck", "onSelect id=$id label=$label")
+                    pressServer(id, label)
                     collapsePanel()
                 }
             )
@@ -438,10 +443,25 @@ class BubbleService : Service() {
     }
 
     /**
-     * 选中反馈：MIUI/Android13 未授权通知时会静默拦截 Toast（logcat: Suppressing toast），
-     * 改用自带小浮层显示，不依赖通知权限。
+     * 选中回传：仅走 P2P 直连（DataChannel，不经过任何转发）。
+     * 按键注入在 Windows 端完成，本地只负责 UI 与手势。
      */
+    private fun pressServer(id: String, label: String) {
+        flashLabel("发送：$label")
+        if (P2PState.send(id)) {
+            flashLabel("已发送：$label")
+        } else {
+            flashLabel("P2P 未连接")
+        }
+    }
+
+    /**
+     * 选中反馈：MIUI/Android13 未授权通知时会静默拦截 Toast（logcat: Suppressing toast），
+     * 改用自带小浮层显示，不依赖通知权限。连续触发时替换旧浮层防叠加。
+     */
+    private var activeFlash: android.widget.TextView? = null
     private fun flashLabel(text: String) {
+        activeFlash?.let { runCatching { windowManager.removeView(it) } }
         val label = android.widget.TextView(this).apply {
             this.text = text
             setTextColor(Color.WHITE)
@@ -464,8 +484,14 @@ class BubbleService : Service() {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = dp(96)
         }
+        activeFlash = label
         runCatching { windowManager.addView(label, params) }
-        label.postDelayed({ runCatching { windowManager.removeView(label) } }, 900)
+        label.postDelayed({
+            if (activeFlash === label) {
+                activeFlash = null
+                runCatching { windowManager.removeView(label) }
+            }
+        }, 900)
     }
 
     private fun dp(value: Int): Int =

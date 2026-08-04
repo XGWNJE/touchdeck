@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  #stage {
+    position: absolute; left: 0; top: 0;
+    transform-origin: var(--px, 0) var(--py, 0);
+    opacity: 0; transform: scale(.5) rotate(-18deg);
+    transition: transform .32s cubic-bezier(.22, 1.6, .36, 1), opacity .25s;
+  }
+  #stage.open { opacity: 1; transform: scale(1) rotate(0deg); }
+  canvas { display: block; }
+  #flash {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    background: rgba(34, 34, 38, .9); color: #fff; font-size: 14px;
+    padding: 8px 14px; border-radius: 16px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity .15s;
+  }
+  #flash.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="flash"></div>
+<script>
+// 径向菜单（Windows 版，复刻安卓 RadialMenuView）：
+// 等面积分环（弧长/环厚恒定）+ 逐槽可见性检查 + C 皮肤（黑透底、发丝线、
+// 选中青色发光三描边近似）。滑选模式由球窗口转发坐标驱动高亮。
+const TAU = Math.PI * 2;
+const DEG = Math.PI / 180;
+const stage = document.getElementById("stage");
+const canvas = document.getElementById("cv");
+const ctx = canvas.getContext("2d");
+const flash = document.getElementById("flash");
+
+let state = null;            // { cx, cy, slots: [{inner,outer,a0,a1,item}] }
+let pressedIndex = -1;
+let iconCache = new Map();   // name -> HTMLImageElement | null
+let flashTimer = null;
+let ballSize = 103;          // 初始球直径（菜单展开时球芯按同尺寸绘制，视觉一致）
+
+function dpn(v) { return v; } // Windows 端直接 px（配置即基线）
+
+function setSize(w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function layoutMenu(anchor, screen, buttons, layout) {
+  const cx = anchor.x, cy = anchor.y;
+  const edgePad = 100;
+  const left = cx < edgePad, right = cx > screen.width - edgePad;
+  const top = cy < edgePad, bottom = cy > screen.height - edgePad;
+  const isCorner = (left || right) && (top || bottom);
+  const isEdge = !isCorner && (left || right || top || bottom);
+  let start, sweep;
+  if (isCorner && left && top) { start = 0; sweep = 90; }
+  else if (isCorner && right && top) { start = 90; sweep = 90; }
+  else if (isCorner && right && bottom) { start = 180; sweep = 90; }
+  else if (isCorner && left && bottom) { start = 270; sweep = 90; }
+  else if (isEdge && left) { start = -90; sweep = 180; }
+  else if (isEdge && right) { start = 90; sweep = 180; }
+  else if (isEdge && top) { start = 0; sweep = 180; }
+  else if (isEdge && bottom) { start = 180; sweep = 180; }
+  else { start = -90; sweep = 360; }
+
+  const bub = layout.bubble || {};
+  // 内环间隙下限 = 球半径 + 边距：球芯（与初始球同尺寸绘制）不被扇区压住
+  const hubGap = Math.max(bub.hubGap ?? 34, ballSize / 2 + 6);
+  const ringThick = bub.ringThick ?? 70;
+  const arcLen = bub.arcLen ?? 108;
+  const sweepRad = sweep * DEG;
+  const visMargin = 10;
+  const slots = [];
+  let ring = 0, idx = 0;
+  while (idx < buttons.length && ring < 16) {
+    const inner = hubGap + ring * ringThick;
+    const outer = inner + ringThick;
+    const rMid = (inner + outer) / 2;
+    const nominal = Math.max(1, Math.round((sweepRad * rMid) / arcLen));
+    const per = sweep / nominal;
+    let usable = 0;
+    for (let s = 0; s < nominal; s++) {
+      if (idx >= buttons.length) break;
+      const a0 = start + per * s, a1 = a0 + per;
+      const mid = ((a0 + a1) / 2) * DEG;
+      const px = cx + rMid * Math.cos(mid);
+      const py = cy + rMid * Math.sin(mid);
+      if (px >= visMargin && px <= screen.width - visMargin && py >= visMargin && py <= screen.height - visMargin) {
+        slots.push({ inner, outer, a0, a1, item: buttons[idx] });
+        idx++; usable++;
+      }
+    }
+    if (usable === 0) break;
+    ring++;
+  }
+  return { cx, cy, slots };
+}
+
+function hit(x, y) {
+  if (!state) return -1;
+  const dx = x - state.cx, dy = y - state.cy;
+  const dist = Math.hypot(dx, dy);
+  const ang = Math.atan2(dy, dx) / DEG;
+  for (let i = 0; i < state.slots.length; i++) {
+    const s = state.slots[i];
+    if (dist < s.inner || dist > s.outer) continue;
+    let rel = ang - s.a0;
+    while (rel < 0) rel += 360;
+    while (rel >= 360) rel -= 360;
+    if (rel <= s.a1 - s.a0) return i;
+  }
+  return -1;
+}
+
+const CYAN = "rgba(34, 211, 238, 1)";
+function withAlpha(color, alpha) {
+  return color.replace(/[\d.]+\)$/, alpha + ")");
+}
+
+function draw() {
+  if (!state) return;
+  const { cx, cy, slots } = state;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // 球芯：与初始球同尺寸（白球渐变 + 阴影），菜单展开时视觉一致。
+  // 覆盖菜单窗口下被环遮挡的球，避免"球变小"的观感。
+  const r = ballSize / 2;
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 8;
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.15, 0, 0, r);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(1, "#c8c8ce");
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, TAU);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i];
+    const a0 = s.a0, a1 = s.a1;
+    const pressed = i === pressedIndex;
+    const path = new Path2D();
+    path.arc(0, 0, s.outer, a0 * DEG, a1 * DEG);
+    path.arc(0, 0, s.inner, a1 * DEG, a0 * DEG, true);
+    path.closePath();
+
+    ctx.fillStyle = "rgba(0,0,0,0.65)";          // 黑透底：只压暗菜单自身区域
+    ctx.fill(path);
+    if (pressed) { ctx.fillStyle = withAlpha(CYAN, 0.45); ctx.fill(path); }
+
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";  // 发丝分割线
+    ctx.lineWidth = 0.7;
+    ctx.stroke(path);
+
+    if (pressed) {                                // 青色发光外弧：递宽递淡三描边
+      for (const [w, a] of [[9, 0.14], [4.5, 0.35], [2, 1]]) {
+        ctx.strokeStyle = withAlpha(CYAN, a);
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.outer, a0 * DEG, a1 * DEG);
+        ctx.stroke();
+      }
+    }
+
+    const mid = ((a0 + a1) / 2) * DEG;
+    const dirX = Math.cos(mid), dirY = Math.sin(mid);
+    const thick = s.outer - s.inner;
+    const rIcon = s.inner + thick * 0.38;
+    const rLabel = s.inner + thick * 0.76;
+    const img = iconCache.get(s.item.icon);
+    if (img) {
+      const size = 24;
+      ctx.drawImage(img, dirX * rIcon - size / 2, dirY * rIcon - size / 2, size, size);
+    }
+    ctx.fillStyle = "#eeeeee";
+    ctx.font = "11px 'Microsoft YaHei', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.item.label, dirX * rLabel, dirY * rLabel + 4);
+  }
+  ctx.restore();
+}
+
+function flashLabel(text) {
+  flash.textContent = text;
+  flash.classList.add("show");
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => flash.classList.remove("show"), 900);
+}
+
+// ---- docked 常驻菜单：两模式共用事件（mouse：hover 待选中 + 左击确认；
+// touch：按下即高亮 + 松手确认；两种确认都是 pointerup）----
+let inputMode = "touch";
+let ballRadius = 40;
+
+function confirmAt(x, y) {
+  const i = hit(x, y);
+  if (i >= 0) {
+    const item = state.slots[i].item;
+    window.touchdeck.select(item.id);   // 主进程注入 + 收起；本端 flash 反馈
+    flashLabel("发送：" + item.label);
+  } else {
+    window.touchdeck.dismiss();
+  }
+  pressedIndex = -1; draw();
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  const i = hit(e.screenX, e.screenY);
+  if (i !== pressedIndex) { pressedIndex = i; draw(); }
+});
+canvas.addEventListener("pointermove", (e) => {
+  // 悬停也更新高亮（键鼠模式 hover 待选中；按下时由 pressedIndex 驱动，两模式通用）
+  const i = hit(e.screenX, e.screenY);
+  if (i !== pressedIndex) { pressedIndex = i; draw(); }
+});
+canvas.addEventListener("pointerup", (e) => {
+  confirmAt(e.screenX, e.screenY);
+});
+
+// ---- 键鼠模式：松开 Tab 确认当前悬停项（Tab 按住展开菜单，松开=确认）----
+window.touchdeck.onMenuConfirm(() => {
+  if (pressedIndex >= 0) {
+    const item = state.slots[pressedIndex].item;
+    window.touchdeck.select(item.id);
+    flashLabel("发送：" + item.label);
+    pressedIndex = -1; draw();
+  } else {
+    window.touchdeck.dismiss();
+  }
+});
+
+// ---- 滑选模式（slide，触控）：高亮跟随由球窗口转发 ----
+window.touchdeck.onMenuPointer((px, py, action) => {
+  const i = hit(px, py);
+  if (action === "move") {
+    if (i !== pressedIndex) { pressedIndex = i; draw(); }
+  } else if (action === "up") {
+    confirmAt(px, py);
+  }
+});
+
+async function loadIcon(name) {
+  if (iconCache.has(name)) return;
+  iconCache.set(name, null);  // 占位防重复请求
+  try {
+    const res = await window.touchdeck.getIcon(name);
+    if (!res) return;
+    const src = res.kind === "svg"
+      ? "data:image/svg+xml;utf8," + encodeURIComponent(res.data)
+      : res.data;
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { iconCache.set(name, img); resolve(); };
+      img.onerror = reject;
+      img.src = src;
+    });
+  } catch { /* 保持 null（文字回退） */ }
+  draw();
+}
+
+window.touchdeck.onMenuInit(async (init) => {
+  const { anchor, mode, ballSize: bs, input, screen } = init;
+  if (bs) ballSize = bs;
+  if (input) inputMode = input;
+  const config = await window.touchdeck.getConfig();
+  state = layoutMenu(anchor, screen, config.buttons, config.layout);
+  ballRadius = ballSize / 2 + 6;
+  setSize(screen.width, screen.height);
+  stage.style.setProperty("--px", anchor.x + "px");
+  stage.style.setProperty("--py", anchor.y + "px");
+  requestAnimationFrame(() => stage.classList.add("open"));
+
+  for (const s of state.slots) loadIcon(s.item.icon);
+  draw();
+});
+</script>
+</body>
+</html>

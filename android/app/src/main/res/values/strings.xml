@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TouchDeck 悬浮球</string>
-    <string name="label_server">服务器地址</string>
     <string name="btn_start">启动悬浮球</string>
     <string name="btn_stop">停止悬浮球</string>
     <string name="btn_grant">去授权悬浮窗权限</string>
@@ -10,4 +9,17 @@
     <string name="status_no_permission">未授权悬浮窗权限，无法启动</string>
     <string name="channel_name">悬浮球服务</string>
     <string name="notification_text">悬浮球正在运行</string>
+    <string name="label_advanced">高级设置</string>
+    <string name="hint_advanced">在 Windows 控制台开启 P2P 连接后，输入房间码即可直连，按键不经过任何转发</string>
+    <string name="label_p2p">P2P 直连（免公网转发）</string>
+    <string name="hint_room_code">输入 Windows 控制台房间码（6 位）</string>
+    <string name="btn_p2p_connect">连接</string>
+    <string name="btn_p2p_disconnect">断开</string>
+    <string name="status_p2p_idle">未连接</string>
+    <string name="status_p2p_connecting">正在连接中…</string>
+    <string name="status_p2p_ready">已配对，正在打洞直连…</string>
+    <string name="status_p2p_connected">已直连（按键不走公网转发）</string>
+    <string name="status_p2p_error">连接失败</string>
+    <string name="status_p2p_closed">已断开</string>
+    <string name="status_p2p_badcode">房间码应为 6 位数字</string>
 </resources>

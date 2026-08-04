@@ -28,3 +28,10 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_17)
     }
 }
+
+dependencies {
+    // WebRTC（P2P 直连打洞）
+    implementation("io.github.webrtc-sdk:android:125.6422.07")
+    // WebSocket（信令）
+    implementation("org.java-websocket:Java-WebSocket:1.5.6")
+}
