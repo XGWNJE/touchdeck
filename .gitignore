@@ -12,4 +12,9 @@ android/local.properties
 touchdeck.state.json
 
 # 调试日志
-prototype/run.log
+prototype/*.log
+
+# 调试产物（真机验证截图、测试 APK、生成素材）
+prototype/*.png
+prototype/*.apk
+prototype/icons-gen/
