@@ -5,7 +5,7 @@
     "main": "src/main.js",
     "scripts": {
         "start": "electron .",
-        "dist:win": "electron-builder --win"
+        "dist:win": "electron-builder --win --publish never"
     },
     "author": "XGWNJE",
     "license": "MIT",
