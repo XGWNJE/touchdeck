@@ -30,9 +30,16 @@ Windows 触控快捷工具栏：跑在被远程控制的 Windows 本机上，为
 
 ## 运行
 
-```bash
-npm install
-npm start
-```
+**一键启动（推荐）**：双击桌面 `TouchDeck` 快捷方式（或 `npm start`）——自动打开控制台窗口并启动面板。控制台可切换网格/悬浮球模式、开启 P2P 直连（显示房间码）。快捷方式生成脚本：`powershell -File scripts/make-shortcuts.ps1`。
+
+默认启动 2×6 网格面板；悬浮球模式（交互与安卓 App 一致：点按展开径向菜单、按下即滑滑选、长按拖球）：控制台里点「悬浮球」即可切换。
+
+## 多端远程（P2P 直连）
+
+远程按键只走 P2P 直连（2026-08-05 定案）：Windows 端控制台开启连接 → 得到 6 位房间码 → 手机/平板 App 输入房间码 → WebRTC 打洞直连（VPN/对称 NAT 下 TURN 中继兜底），一个房间最多 8 台设备同时连接，按键经加密 DataChannel 直达本机注入，**不经过任何服务器转发**。信令服务 `wss://api.xgwnje.cn/signal` 仅做配对，TURN `212.135.41.88:3478` 仅做中继兜底。
+
+- **安卓悬浮球 App**（`android/`）：按钮配置与图标打包在 APK 内（离线 assets，`npm run build:assets` 重新生成），高级设置里输入房间码连接，选中按钮经 DataChannel 发 `{id}`，按键解析与注入在 Windows 端完成。
+- **平板浏览器**：打开 `src/renderer/peer.html` 可直接作为客户端加入房间（开发/测试用）。
+- **多设备**：同一房间码支持多台设备同时连接、同时按键（服务端 1 host + 8 clients，clientId 路由）。
 
 技术栈：Electron + 原生 JS（原型期）；按键注入 @nut-tree/nut-js；窗口移动 koffi 直调 Win32。Agent 侧约束见 AGENTS.md。
