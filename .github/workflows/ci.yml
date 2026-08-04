@@ -32,34 +32,93 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --console=plain
 
+      - name: Rename APK with version
+        working-directory: android/app/build/outputs/apk/debug
+        run: |
+          VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' ../../../../build.gradle.kts 2>/dev/null || echo dev)"
+          cp app-debug.apk "touchdeck-${VERSION}.apk"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: touchdeck-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/touchdeck-*.apk
           if-no-files-found: error
 
-      - name: Publish release (tag only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          gh release create "${TAG}" \
-            android/app/build/outputs/apk/debug/app-debug.apk \
-            --title "TouchDeck ${TAG}" \
-            --notes "Android debug APK（P2P 直连，配置/图标离线打包）。" || \
-            gh release upload "${TAG}" android/app/build/outputs/apk/debug/app-debug.apk --clobber
+  electron-package:
+    name: Package Windows app
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  electron-check:
-    name: Check Electron sources
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build installers
+        run: npm run dist:win
+
+      - name: Upload installers artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: dist/*.exe
+          if-no-files-found: error
+
+  signal-package:
+    name: Package signal server
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Syntax check main/preload
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install server deps
+        working-directory: server
+        run: npm ci --omit=dev
+
+      - name: Create tarball
+        working-directory: server
         run: |
-          node --check src/main.js
-          node --check src/preload.js
-          node --check scripts/build-panel-assets.mjs
+          VERSION="$(node -p "require('./package.json').version")"
+          tar -czf "../touchdeck-signal-${VERSION}.tar.gz" --exclude='./package-lock.json' --exclude='./node_modules/.cache' ./
+
+      - name: Upload signal tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signal-server
+          path: touchdeck-signal-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish release (tag only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android-build, electron-package, signal-package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-assets
+
+      - name: Create/update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ASSETS=""
+          while IFS= read -r f; do ASSETS="${ASSETS} ${f}"; done < <(find dist-assets -type f)
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" ${ASSETS} --title "TouchDeck ${TAG}" --notes "三端发行物：安卓 APK + Windows 安装包/便携版 + 信令服务包。"
+          else
+            gh release upload "${TAG}" ${ASSETS} --clobber
+          fi

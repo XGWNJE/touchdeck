@@ -1,0 +1,20 @@
+[Unit]
+Description=TouchDeck P2P signaling
+After=network.target
+
+[Service]
+Type=simple
+User=touchsignal
+Group=touchsignal
+WorkingDirectory=/opt/touchdeck-signal
+ExecStart=/usr/bin/node /opt/touchdeck-signal/signal.mjs
+Restart=on-failure
+RestartSec=3
+MemoryMax=128M
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/etc/touchdeck-signal
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

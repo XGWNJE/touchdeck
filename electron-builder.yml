@@ -1,0 +1,19 @@
+appId: cn.touchdeck.app
+productName: TouchDeck
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+  - node_modules/**/*
+win:
+  icon: build/icon.png
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: touchdeck-setup-${version}.exe
+portable:
+  artifactName: touchdeck-portable-${version}.exe

@@ -1,10 +1,11 @@
 {
     "name": "touchdeck",
-    "version": "0.1.0",
+    "version": "0.1.6",
     "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
     "main": "src/main.js",
     "scripts": {
-        "start": "electron ."
+        "start": "electron .",
+        "dist:win": "electron-builder --win"
     },
     "license": "MIT",
     "dependencies": {
@@ -12,5 +13,8 @@
         "electron": "^43.2.0",
         "koffi": "^3.1.4",
         "lucide-static": "^1.28.0"
+    },
+    "devDependencies": {
+        "electron-builder": "^26.0.12"
     }
 }
