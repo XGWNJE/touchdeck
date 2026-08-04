@@ -33,6 +33,19 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 - `src/renderer/index.html`：渲染引擎——主题令牌注入 CSS 变量，布局驱动网格，分组样式按主题动态生成。
 - `prototype/visual-lab.html`：UI 参数实测页（尺寸/透明度/反馈/布局），双击浏览器打开 F11 全屏用。
 
+## 发包（Release，Agent 收到「发包」指令时的唯一流程）
+
+「发包」= 发布三端产物到 GitHub Releases：安卓 APK + Windows 安装包（setup + portable）+ 信令服务包。构建与发布由 GitHub Actions 全自动完成（`.github/workflows/ci.yml`），**push `v*` 标签即触发**，无需也不允许手动改 ci.yml 之外的其他发布通道。
+
+发包流程（严格按顺序）：
+
+1. **版本号三处同步**（不一致一律不许发包）：`package.json`（主程序）+ `android/app/build.gradle.kts`（`versionName` 同步、`versionCode` 递增 1）+ `server/package.json`（信令服务）。先跑 `node scripts/release.mjs` 做一致性检查与引导。
+2. **本地预检**：改过配置/图标先 `npm run build:assets` 重新生成安卓离线资源；语法错误先本地跑一遍（`npm run dist:win` 或等 CI 报错兜底）。
+3. **打标签触发**：`git tag v<版本>`（如 `v0.1.7`）→ `git push origin v<版本>`。push 成功即视为发包开始，CI 自动跑三个打包 job + publish job。
+4. **跟踪核验**：等 CI 全绿后，打开 GitHub Releases 页确认三端产物齐全（APK、两个 exe、tar.gz）；缺哪个产物视为发包失败，如实报告。
+5. **失败处理**：CI 红叉 → 定位失败 job → 修复后 `git tag -d v<版本>` + `git push origin :refs/tags/v<版本>` 删掉坏标签 → 重新 `git push origin v<版本>`（publish job 用 `--clobber` 覆盖同名 Release）。
+6. **测试期产物**（未正式发布、真机验证用）按 mini-vault skill 走中转站 get.xgwnje.cn，问过 owner 才传；正式发包只走 GitHub Releases。
+
 ## 最小验证矩阵
 
 | 变更类型 | 最小验证 |
