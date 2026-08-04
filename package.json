@@ -7,14 +7,15 @@
         "start": "electron .",
         "dist:win": "electron-builder --win"
     },
+    "author": "XGWNJE",
     "license": "MIT",
     "dependencies": {
         "@nut-tree/nut-js": "^3.1.2",
-        "electron": "^43.2.0",
         "koffi": "^3.1.4",
         "lucide-static": "^1.28.0"
     },
     "devDependencies": {
-        "electron-builder": "^26.0.12"
+        "electron": "^43.2.0",
+        "electron-builder": "^26.15.3"
     }
 }
