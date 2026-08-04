@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install deps
         run: npm ci
@@ -80,7 +80,7 @@ jobs:
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install server deps
         working-directory: server
@@ -118,7 +118,8 @@ jobs:
           ASSETS=""
           while IFS= read -r f; do ASSETS="${ASSETS} ${f}"; done < <(find dist-assets -type f)
           if ! gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release create "${TAG}" ${ASSETS} --title "TouchDeck ${TAG}" --notes "三端发行物：安卓 APK + Windows 安装包/便携版 + 信令服务包。"
+            gh release create "${TAG}" ${ASSETS} --title "TouchDeck ${TAG}" --notes "涓夌鍙戣鐗╋細瀹夊崜 APK + Windows 瀹夎鍖?渚挎惡鐗?+ 淇′护鏈嶅姟鍖呫€?
           else
             gh release upload "${TAG}" ${ASSETS} --clobber
           fi
+
