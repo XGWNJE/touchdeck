@@ -18,24 +18,14 @@
 <body>
 <div id="ball"></div>
 <script>
-// 悬浮球（Windows 版，交互基准 = 安卓 BubbleTouchListener）。
-// 两种输入模式（配置 ui.input，主进程经 menu-init 传给菜单，这里只控制球的手势）：
-// - touch（默认安卓逻辑）：点按展开/收起；按下即滑=滑选展开（菜单锚定起点，
-//   高亮跟随转发）；长按 350ms=拖球。
-// - mouse（键鼠模式）：点按展开/收起（悬停与确认在菜单端：hover 待选中，
-//   左击或松 Tab 确认）；长按 350ms=拖球；无滑选手势。
-// UU 触控注入下 pointermove 不可靠，拖拽在 UU 场景可能不跟手，点按式是兜底。
-const SLOP = 10;          // 位移阈值（px），触控模式超阈值进滑选
+// 悬浮球（Windows 版，2026-08-05 定案：本机只保留键鼠交互，触控滑选归安卓端）。
+// 手势：快速点按=展开/收起常驻菜单（悬停与确认在菜单端：hover 待选中，
+// 左击或松 Tab 确认）；长按 350ms=拖球挪位。无滑选手势。
 const HOLD_MS = 350;      // 长按进拖球
 const ball = document.getElementById("ball");
 const body = document.body;
 
-let inputMode = "touch";
-window.touchdeck.getConfig().then((c) => { inputMode = c.ui?.input || "touch"; });
-
-let downX = 0, downY = 0;
 let pressed = false;       // 悬停 pointermove 也会触发（Chromium 兼容事件），必须按下后才响应
-let slideMode = false;
 let holdTimer = null;
 let dragging = false;
 
@@ -43,10 +33,7 @@ function clearHold() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = nul
 
 ball.addEventListener("pointerdown", (e) => {
   pressed = true;
-  ball.setPointerCapture(e.pointerId);  // 捕获目标=ball 自身：菜单窗口盖上来后触摸流仍在本元素，
-                                        // 且 up/move 事件冒泡仍经过 ball 的监听器（安卓 skipBubbleRetop 的对应物）
-  downX = e.clientX; downY = e.clientY;
-  slideMode = false; dragging = false;
+  dragging = false;
   body.classList.add("pressed");
   clearHold();
   holdTimer = setTimeout(() => {
@@ -58,43 +45,24 @@ ball.addEventListener("pointerdown", (e) => {
   e.preventDefault();
 });
 
-ball.addEventListener("pointermove", (e) => {
-  if (!pressed) return;
-  if (dragging) return;                 // 拖球移动由主进程轮询光标完成
-  if (inputMode === "mouse") return;    // 键鼠模式：无滑选手势，悬停确认在菜单端
-  const dx = e.clientX - downX, dy = e.clientY - downY;
-  if (!slideMode && (Math.abs(dx) >= SLOP || Math.abs(dy) >= SLOP)) {
-    slideMode = true;
-    clearHold();
-    window.touchdeck.openMenu("slide");
-  }
-  if (slideMode) {
-    // 转发手指位置给菜单窗口做高亮跟随（菜单窗口收不到本窗口上的触摸流）。
-    // 必须用屏幕坐标：bubble 窗口是局部的，clientX/Y 在菜单窗口里会错位
-    window.touchdeck.menuPointer(e.screenX, e.screenY, "move");
-  }
-  e.preventDefault();
-});
-
 ball.addEventListener("pointerup", (e) => {
+  if (!pressed) return;                 // 杂散 up（合成 mouseup 等）不得触发收起/展开
   body.classList.remove("pressed");
   pressed = false;
   clearHold();
-  if (slideMode) {
-    window.touchdeck.menuPointer(e.screenX, e.screenY, "up");
-  } else if (dragging) {
+  if (dragging) {
     window.touchdeck.stopDrag();        // 拖球松手：唯一可信的收尾信号
   } else {
     window.touchdeck.toggleMenu();      // 快速点按：展开/收起常驻菜单
   }
-  slideMode = false; dragging = false;
+  dragging = false;
 });
 
 ball.addEventListener("pointercancel", () => {
   body.classList.remove("pressed");
   pressed = false;
   clearHold();
-  slideMode = false; dragging = false;
+  dragging = false;
 });
 </script>
 </body>

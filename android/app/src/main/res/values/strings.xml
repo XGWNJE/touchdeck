@@ -22,4 +22,6 @@
     <string name="status_p2p_error">连接失败</string>
     <string name="status_p2p_closed">已断开</string>
     <string name="status_p2p_badcode">房间码应为 6 位数字</string>
+    <string name="status_p2p_reconnecting">断线，自动重连中…</string>
+    <string name="status_p2p_hostgone">主机断线，等待恢复…</string>
 </resources>

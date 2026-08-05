@@ -7,9 +7,5 @@
     "dragHoldMs": 500
   },
   "themeOverrides": {},
-  "layoutOverrides": {},
-  "ui": {
-    "input": "touch",
-    "mode": "bubble"
-  }
+  "layoutOverrides": {}
 }

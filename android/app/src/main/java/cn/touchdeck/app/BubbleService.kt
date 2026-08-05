@@ -392,6 +392,9 @@ class BubbleService : Service() {
 
             val menu = RadialMenuView(
                 this, vcx, vcy, items,
+                // MIUI 展开层比物理屏矮（状态栏之下开始）：传真实可视尺寸给菜单做边缘判定
+                viewW = overlay.width.toFloat(),
+                viewH = overlay.height.toFloat(),
                 onDismiss = {
                     android.util.Log.d("TouchDeck", "dismiss (release outside)")
                     collapsePanel()

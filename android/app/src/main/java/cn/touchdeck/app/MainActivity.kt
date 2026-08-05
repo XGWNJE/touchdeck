@@ -23,6 +23,7 @@ class MainActivity : Activity() {
     companion object {
         const val PREFS_NAME = "touchdeck"
         const val KEY_SIGNAL_URL = "signal_url"
+        const val KEY_ROOM_CODE = "room_code"
         const val DEFAULT_SIGNAL_URL = "wss://api.xgwnje.cn/signal"
     }
 
@@ -86,6 +87,8 @@ class MainActivity : Activity() {
         val roomEdit = EditText(this).apply {
             hint = getString(R.string.hint_room_code)
             setSingleLine()
+            // 房号持久化：上次连接的房号预填，断线重连/重开 App 不必重输
+            setText(prefs.getString(KEY_ROOM_CODE, ""))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         val p2pBtn = Button(this).apply {
@@ -131,10 +134,13 @@ class MainActivity : Activity() {
                     "connecting" -> getString(R.string.status_p2p_connecting)
                     "ready" -> getString(R.string.status_p2p_ready)
                     "connected" -> getString(R.string.status_p2p_connected)
+                    "reconnecting" -> getString(R.string.status_p2p_reconnecting)
+                    "host-gone" -> getString(R.string.status_p2p_hostgone)
                     "error" -> getString(R.string.status_p2p_error)
                     "closed" -> getString(R.string.status_p2p_closed)
                     else -> getString(R.string.status_p2p_idle)
                 }
+                refreshP2PButton()
             }
         }
         refreshP2PButton()
@@ -142,7 +148,7 @@ class MainActivity : Activity() {
 
     /** P2P 连接/断开切换（房间码来自输入框） */
     private fun toggleP2P(roomEdit: EditText) {
-        if (P2PState.status == "connected" || P2PState.status == "connecting" || P2PState.status == "ready") {
+        if (P2PState.status != "idle" && P2PState.status != "error" && P2PState.status != "closed") {
             P2PState.stop()
         } else {
             val code = roomEdit.text.toString().trim()
@@ -150,6 +156,7 @@ class MainActivity : Activity() {
                 p2pStateText.text = getString(R.string.status_p2p_badcode)
                 return
             }
+            prefs.edit().putString(KEY_ROOM_CODE, code).apply()
             val signal = prefs.getString(KEY_SIGNAL_URL, DEFAULT_SIGNAL_URL).orEmpty()
             P2PState.start(signal, code) {
                 // 通道打开（无 UI 动作，按键走 P2PState.send）
@@ -159,18 +166,11 @@ class MainActivity : Activity() {
     }
 
     private fun refreshP2PButton() {
-        val connected = P2PState.status == "connected" || P2PState.status == "connecting" || P2PState.status == "ready"
+        // 连接中/已连/重连中/等主机恢复 都视为活跃态，按钮显示「断开」
+        val active = P2PState.status !in listOf("idle", "error", "closed")
         val btn = (advBody.getChildAt(1) as? LinearLayout)?.getChildAt(1) as? Button
-        btn?.text = if (connected) getString(R.string.btn_p2p_disconnect) else getString(R.string.btn_p2p_connect)
+        btn?.text = if (active) getString(R.string.btn_p2p_disconnect) else getString(R.string.btn_p2p_connect)
         btn?.isEnabled = true
-        if (!connected) {
-            p2pStateText.text = when (P2PState.status) {
-                "idle" -> getString(R.string.status_p2p_idle)
-                "error" -> getString(R.string.status_p2p_error)
-                "closed" -> getString(R.string.status_p2p_closed)
-                else -> getString(R.string.status_p2p_idle)
-            }
-        }
     }
 
     override fun onResume() {

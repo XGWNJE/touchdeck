@@ -34,20 +34,24 @@ const CONFIG_PATH = path.join(__dirname, "..", "touchdeck.config.json");
 const STATE_PATH = path.join(__dirname, "..", "touchdeck.state.json");
 const ROOT = path.join(__dirname, "..");
 
-// 面板位置持久化：拖动结束写入，启动时恢复；与面向用户的 config 分离（机器状态不手改）
+// 面板位置与启停状态持久化：拖动结束写入，启动时恢复；与面向用户的 config 分离（机器状态不手改）。
+// loadState 返回整个状态对象（x/y 可能缺失，调用方用 isPositionUsable 自行判有效性）；
+// saveState 合并写——x/y（拖球）与 panel（启停）是两个关注点，覆盖写会互相冲掉（2026-08-05 实证：
+// 未拖过球就关面板时旧版 loadState 因缺 x/y 返回 null，panel=false 标记丢失，重启后面板自启）。
 function loadState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_PATH, "utf-8"));
-    if (Number.isFinite(s.x) && Number.isFinite(s.y)) return s;
+    if (s && typeof s === "object") return s;
   } catch { /* 无状态文件属正常 */ }
   return null;
 }
 
-function saveState(pos) {
+function saveState(patch) {
   try {
-    fs.writeFileSync(STATE_PATH, JSON.stringify(pos));
+    const cur = loadState() || {};
+    fs.writeFileSync(STATE_PATH, JSON.stringify({ ...cur, ...patch }));
   } catch (e) {
-    console.error("[touchdeck] 位置持久化失败:", e.message);
+    console.error("[touchdeck] 状态持久化失败:", e.message);
   }
 }
 
@@ -112,7 +116,9 @@ function resolveConfig() {
     theme: mergedTheme,
     layout: mergedLayout,
     buttons: mergedLayout.buttons,
-    ui: { mode: "grid", input: "mouse", ...(user.ui || {}) },
+    // 2026-08-05 定案：本机面板只保留悬浮球模式 + 键鼠交互（触控归安卓悬浮球端），
+    // 不再读 ui.mode / ui.input 配置
+    ui: { mode: "bubble", input: "mouse" },
   };
 }
 
@@ -162,9 +168,7 @@ async function sendKeys(keys) {
   }
 }
 
-let win = null;
-
-// 通用 IPC（grid 与 bubble 两种模式共用）：配置/图标/注入/拖拽。
+// 通用 IPC：配置/图标/注入/拖拽。
 // 在 app.whenReady 统一注册，不再挂某个窗口的创建流程上。
 function registerCommonIpc() {
   ipcMain.handle("get-config", () => resolveConfig());
@@ -217,7 +221,7 @@ function registerCommonIpc() {
   //  Modal 移动循环 WM_NCLBUTTONDOWN/SC_MOVE 在 focusable:false 窗口上无效，均不可走）
   // SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOOWNERZORDER = 0x0215
   // （误用 0x0233 会带上 SWP_NOMOVE(0x0002)：调用返回成功但位置永远不变——2026-08-02 实证）
-  const dragTarget = () => bubbleWin || win;
+  const dragTarget = () => bubbleWin;
   let dragTimer = null;
   const endDrag = (tag) => {
     if (!dragTimer) return;
@@ -277,97 +281,10 @@ function registerCommonIpc() {
   ipcMain.on("stop-drag", () => { console.log("[touchdeck] stop-drag received, timer running:", !!dragTimer); endDrag(" (stop-drag)"); });
 }
 
-function createWindow() {
-  const config = resolveConfig();
-  const ui = config.layout;
-  const size = Math.round(ui.buttonSize * ui.scale);
-  const cols = ui.columns;
-  const rows = Math.ceil(config.buttons.length / cols);
-  const handleSize = ui.handle && ui.handle.size ? ui.handle.size : 0; // 小揪揪手柄高度（纵向面板）
-  const width = cols * size + (cols - 1) * ui.gap + ui.padding * 2;
-  const height = rows * size + (rows - 1) * ui.gap + ui.padding * 2 + handleSize;
-
-  const area = screen.getPrimaryDisplay().workArea;
-  let x, y;
-  if (ui.position === "left") {
-    x = area.x + 24;
-    y = Math.round(area.y + (area.height - height) / 2);
-  } else if (ui.position === "right") {
-    x = Math.round(area.x + area.width - width - 24);
-    y = Math.round(area.y + (area.height - height) / 2);
-  } else { // 默认底部居中
-    x = Math.round(area.x + (area.width - width) / 2);
-    y = Math.round(area.y + area.height - height - 24);
-  }
-
-  // 位置持久化：有有效记忆位置则覆盖布局默认位
-  const saved = loadState();
-  if (saved && isPositionUsable(saved.x, saved.y, width, height)) {
-    x = saved.x;
-    y = saved.y;
-  }
-
-  win = new BrowserWindow({
-    width, height, x, y,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    focusable: false,        // 铁律 1：点击不抢焦点
-    skipTaskbar: true,
-    resizable: false,
-    hasShadow: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-    },
-  });
-
-  win.setAlwaysOnTop(true, "screen-saver");
-  // 锁死缩放：UU 多点触控可能被 Chromium 解释为捏合缩放，表现为面板持续放大
-  win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
-  win.webContents.setZoomFactor(1);
-  win.loadFile(path.join(__dirname, "renderer", "index.html"));
-  win.webContents.on("did-finish-load", () => { console.log("[touchdeck] renderer loaded"); sendBounds(); });
-  win.webContents.on("did-fail-load", (_e, code, desc) => console.log("[touchdeck] load failed", code, desc));
-  win.webContents.on("console-message", (_e, _l, msg) => console.log("[touchdeck:renderer]", msg));
-  console.log("[touchdeck] window bounds", JSON.stringify(win.getBounds()));
-
-  // 推送窗口位置给渲染端（小揪揪靠边翻面用）：启动一次 + 每次拖动结束（防抖）一次
-  const sendBounds = () => {
-    const b = win.getBounds();
-    const wa = screen.getDisplayNearestPoint({ x: b.x, y: b.y }).workArea;
-    win.webContents.send("win-bounds", { ...b, area: wa });
-  };
-
-  // 任何移动（长按抓起拖动 / 空白处与小揪揪原生拖动）都持久化位置，防抖 300ms
-  let moveSaveTimer = null;
-  win.on("moved", () => {
-    clearTimeout(moveSaveTimer);
-    moveSaveTimer = setTimeout(() => {
-      const [mx, my] = win.getPosition();
-      saveState({ x: mx, y: my });
-      sendBounds();
-    }, 300);
-  });
-
-  // 临时诊断：启动 18 秒后再截一张（留出模拟拖拽的时间窗口，验证拖拽不变形）
-  setTimeout(() => {
-    (async () => {
-      const size = screen.getPrimaryDisplay().size;
-      const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size });
-      fs.writeFileSync(path.join(__dirname, "..", "prototype", "screen-drag.png"), sources[0].thumbnail.toPNG());
-    })().catch(() => {});
-  }, 18000);
-}
-
-// ===== 悬浮球模式（ui.mode === "bubble"）：交互基准 = 安卓悬浮球 App =====
+// ===== 悬浮球面板（2026-08-05 定案：本机唯一面板形态，网格模式已移除）=====
 // 球窗口（小圆球，可拖）+ 全屏透明菜单窗口（展开时创建，收起销毁）。
-// 滑选手势桥：bubble 渲染端 pointerdown 即捕获指针，菜单窗口盖上来后
-// 触摸流仍在球窗口（setPointerCapture 保底），move/up 经 IPC 转发给菜单窗口
-// 做高亮跟随与松手确认——对应安卓的 skipBubbleRetop。
 let bubbleWin = null;
 let menuWin = null;
-let menuPointerMode = "docked"; // docked=常驻点选 / slide=滑选（锚定起点）
 
 function bubbleAnchor() {
   const b = bubbleWin.getBounds();
@@ -408,26 +325,17 @@ function createBubbleWindow() {
     }, 300);
   });
 
-  ipcMain.on("open-menu", (_e, mode) => {
-    openMenuWindow(mode || "docked");
-  });
   ipcMain.on("toggle-menu", () => {
     if (menuWin && !menuWin.isDestroyed()) closeMenuWindow();
-    else openMenuWindow("docked");
+    else openMenuWindow();
   });
   ipcMain.on("close-menu", () => closeMenuWindow());
-  // 滑选桥：bubble 渲染端转发手指位置给菜单窗口（菜单窗口自身收不到球上触摸流）
-  ipcMain.on("menu-pointer", (_e, px, py, action) => {
-    if (!menuWin || menuWin.isDestroyed()) return;
-    menuWin.webContents.send("menu-pointer", px, py, action);
-  });
 
   console.log("[touchdeck] bubble window", JSON.stringify(bubbleWin.getBounds()));
 }
 
-function openMenuWindow(mode) {
+function openMenuWindow() {
   if (menuWin && !menuWin.isDestroyed()) return;
-  menuPointerMode = mode;
   const b = screen.getPrimaryDisplay().bounds;
   menuWin = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
@@ -442,8 +350,6 @@ function openMenuWindow(mode) {
     console.log("[touchdeck] menu window bounds", JSON.stringify(menuWin.getBounds()));
     menuWin.webContents.send("menu-init", {
       anchor: bubbleAnchor(),
-      mode,
-      input: resolveConfig().ui.input || "mouse",
       ballSize: bubbleWin.getBounds().width,
       screen: { width: b.width, height: b.height },
     });
@@ -470,26 +376,33 @@ ipcMain.on("menu-select", async (_e, buttonId) => {
   closeMenuWindow();
 });
 
-// ===== 键鼠模式（ui.input === "mouse"）：Tab 键展开菜单，松开 Tab 确认悬停项 =====
+// ===== 键鼠交互：Tab 键展开菜单，松开 Tab 确认悬停项 =====
 // focusable:false 窗口收不到键盘事件，用系统级 globalShortcut 注册 Tab；
-// Tab 松开（0x8000 位消失）时发送 menu-confirm，由菜单端确认当前悬停扇区或取消
+// Tab 松开（0x8000 位消失）时发送 menu-confirm，由菜单端确认当前悬停扇区或取消。
+// 注意：按住 Tab 时 Windows 键盘自动重复会反复触发 globalShortcut 回调（RegisterHotKey
+// 机理），必须以 tabHoldActive 区分「按住期间的重复触发」（忽略）与「松开后的再次按下」
+// （收起）——2026-08-05 实证：无守卫时按住 Tab 不松，自动重复触发走到收起分支，
+// 菜单在按住期间被误关掉。
 let tabTimer = null;
+let tabHoldActive = false;
 function registerTabShortcut() {
   ensureWin32();
   const ok = globalShortcut.register("Tab", () => {
-    if (resolveConfig().ui.mode !== "bubble" || resolveConfig().ui.input !== "mouse") return;
     if (menuWin && !menuWin.isDestroyed()) {
-      // Tab 再次按下：收起（键鼠习惯：Esc/Tab 关菜单）
+      if (tabHoldActive) return;   // 本次按住展开期间的自动重复，忽略
+      // 常驻菜单（点球展开的）再按 Tab：收起（键鼠习惯：Esc/Tab 关菜单）
       closeMenuWindow();
       return;
     }
-    openMenuWindow("docked");
+    openMenuWindow();
+    tabHoldActive = true;
     clearInterval(tabTimer);
     tabTimer = setInterval(() => {
       const vk = GetAsyncKeyState ? GetAsyncKeyState(0x09) : 0;
       if (!(vk & 0x8000)) {
         clearInterval(tabTimer);
         tabTimer = null;
+        tabHoldActive = false;
         if (menuWin && !menuWin.isDestroyed()) menuWin.webContents.send("menu-confirm");
       }
     }, 50);
@@ -552,43 +465,47 @@ function createTray() {
   }
 }
 
-// 按配置模式启动/重建面板窗口（grid 或 bubble），已存在则先销毁。
+// 启动/重建悬浮球面板，已存在则先销毁。
 // 用户可在控制台关闭面板（用安卓端时避免 Windows 双悬浮球）；关闭状态持久化到 state
 function panelDisabled() {
   const s = loadState();
   return s && s.panel === false;
 }
 
+function panelRunning() {
+  return !!(bubbleWin && !bubbleWin.isDestroyed());
+}
+
+// 面板状态主动推送控制台（启停/DPI 重建后 UI 立即刷新，不等 4s 轮询）
+function notifyPanelStatus() {
+  if (consoleWin && !consoleWin.isDestroyed()) {
+    consoleWin.webContents.send("panel-status", {
+      panelRunning: !panelDisabled() && panelRunning(),
+      panelDisabled: panelDisabled(),
+    });
+  }
+}
+
 function startPanel() {
   if (panelDisabled()) return;
   closeMenuWindow();
-  if (win && !win.isDestroyed()) win.destroy();
   if (bubbleWin && !bubbleWin.isDestroyed()) bubbleWin.destroy();
-  win = null;
   bubbleWin = null;
-  if (resolveConfig().ui.mode === "bubble") {
-    createBubbleWindow();
-  } else {
-    createWindow();
-  }
+  createBubbleWindow();
+  notifyPanelStatus();
 }
 
 function stopPanel() {
   closeMenuWindow();
-  if (win && !win.isDestroyed()) win.destroy();
   if (bubbleWin && !bubbleWin.isDestroyed()) bubbleWin.destroy();
-  win = null;
   bubbleWin = null;
+  notifyPanelStatus();
 }
 
 function registerConsoleIpc() {
   ipcMain.handle("console-status", async () => {
-    const cfg = resolveConfig();
-    const panelOn = !panelDisabled() && !!((win && !win.isDestroyed()) || (bubbleWin && !bubbleWin.isDestroyed()));
     return {
-      mode: cfg.ui.mode || "grid",
-      input: cfg.ui.input || "mouse",
-      panelRunning: panelOn,
+      panelRunning: !panelDisabled() && panelRunning(),
       panelDisabled: panelDisabled(),
     };
   });
@@ -604,35 +521,7 @@ function registerConsoleIpc() {
       const s = loadState() || {};
       saveState({ ...s, panel: false });
     }
-    return { running: !panelDisabled() && !!((win && !win.isDestroyed()) || (bubbleWin && !bubbleWin.isDestroyed())) };
-  });
-
-  ipcMain.handle("console-set-mode", async (_e, mode) => {
-    console.log("[touchdeck] console-set-mode", mode);
-    const user = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
-    if (mode === "grid" || mode === "bubble") {
-      if (mode === "grid") delete user.ui;
-      else user.ui = { ...(user.ui || {}), mode: "bubble" };
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(user, null, 2) + "\n");
-    }
-    startPanel();
-    return { ok: true };
-  });
-
-  ipcMain.handle("console-set-input", async (_e, input) => {
-    console.log("[touchdeck] console-set-input", input);
-    const user = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
-    if (input === "mouse" || input === "touch") {
-      user.ui = { ...(user.ui || {}), input };
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(user, null, 2) + "\n");
-    }
-    startPanel();
-    return { ok: true };
-  });
-
-  ipcMain.handle("console-open-panel", () => {
-    startPanel();
-    return { ok: true };
+    return { running: !panelDisabled() && panelRunning() };
   });
 }
 
@@ -672,12 +561,18 @@ function registerPeerIpc() {
   ipcMain.handle("peer-status-get", () => peerStatus);
   ipcMain.on("peer-press", async (_e, buttonId) => {
     const btn = resolveConfig().buttons.find((b) => b.id === buttonId);
-    if (!btn || !btn.keys) return;
+    if (!btn || !btn.keys) {
+      console.error("[touchdeck] peer press 未配置:", buttonId);
+      if (consoleWin && !consoleWin.isDestroyed()) consoleWin.webContents.send("peer-press-failed", buttonId);
+      return;
+    }
     try {
       await sendKeys(btn.keys);
       console.log("[touchdeck] peer press", buttonId);
     } catch (err) {
       console.error("[touchdeck] peer press error:", err.message);
+      // 注入失败必须可见（旧版只写日志，控制台无感知）
+      if (consoleWin && !consoleWin.isDestroyed()) consoleWin.webContents.send("peer-press-failed", buttonId);
     }
   });
 }

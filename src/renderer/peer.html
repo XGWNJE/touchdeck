@@ -6,35 +6,76 @@
 <body>
 <script>
 // P2P 中继（隐藏窗口）：Windows 端 = 房间 host。
-// 连接信令 → 建房间（控制台显示房间码）→ 等 client（安卓）加入 →
-// host 创建 DataChannel → 收到按键消息 {id} → IPC 主进程本地注入。
+// 连接信令 → 建/回房间（控制台显示房间码）→ 等 client（安卓）加入 →
+// client 创建 DataChannel → 收到按键消息 {id} → IPC 主进程本地注入。
 // 打洞失败（对称 NAT）由 TURN 兜底；所有信令/媒体经 DTLS 加密。
+//
+// 健壮性（2026-08-05）：
+// - 房号持久化（localStorage）+ 信令重连带原房号 reclaim：信令闪断不再全量重配。
+// - 重连指数退避（2s→30s 封顶），10 次失败进 signal-failed 终态（不再无限重试）。
+// - 信令断开期间 peers 保留（服务端宽限期不删房）；死连接由 DataChannel 心跳判半开清理。
+// - channel.onclose / ICE failed 清理 peer 并实时刷新设备计数（按 open 通道数，不再虚高）。
 const SIGNAL_DEFAULT = "wss://api.xgwnje.cn/signal";
+const ROOM_KEY = "touchdeck.roomCode";
+const MAX_ATTEMPTS = 10;
+const PING_TIMEOUT_MS = 25000; // client 每 5s ping，25s 无消息判半开
 
 let ws = null;
 let roomCode = null;
 let turnCfg = null;
 let stopped = true;
-// 多客户端：clientId -> { pc, channel }（每台手机一条独立 WebRTC 连接）
+let attempts = 0;
+// 主动 close（onPeerStart 换连接）会触发 onclose，识别并吞掉防误排重连
+let intentionalClose = false;
+// 多客户端：clientId -> { pc, channel, lastPing }（每台手机一条独立 WebRTC 连接）
 const peers = new Map();
 
 function postStatus(payload) {
   window.touchdeck.peerStatus(payload);
 }
 
+// 设备计数按「通道实际 open」的设备数（旧版按 Map 条目，死连接虚高）
+function openChannels() {
+  let n = 0;
+  for (const p of peers.values()) {
+    if (p.channel && p.channel.readyState === "open") n++;
+  }
+  return n;
+}
+
+// 有活设备报 connected，无活设备回 room（等待加入），计数实时跟随
+function postPeers() {
+  const n = openChannels();
+  if (n > 0) postStatus({ phase: "connected", peers: n });
+  else if (roomCode) postStatus({ phase: "room", code: roomCode, peers: 0 });
+}
+
+function backoffMs(n) {
+  return Math.min(2000 * Math.pow(2, n - 1), 30000);
+}
+
 async function connectSignal(url) {
   ws = new WebSocket(url);
   ws.onopen = () => {
     postStatus({ phase: "signal-ok" });
-    ws.send(JSON.stringify({ type: "create-room" }));
+    // reclaim：带记忆的房号重连（服务端宽限期内复用房间，旧设备自动恢复）
+    const saved = localStorage.getItem(ROOM_KEY);
+    ws.send(JSON.stringify({ type: "create-room", code: saved || undefined }));
   };
   ws.onmessage = (e) => handleSignal(JSON.parse(e.data));
   ws.onclose = () => {
-    // 断线自动重连：半开连接（VPN/网络切换）会静默僵死，
-    // 重启控制台才恢复的旧问题就出在这——现在自动重建信令并换新房间码
-    postStatus({ phase: "reconnecting" });
-    teardownPeer();
-    if (!stopped) setTimeout(() => connectSignal(url), 2000);
+    if (intentionalClose) { intentionalClose = false; return; }
+    if (stopped) return;
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) {
+      stopped = true;
+      postStatus({ phase: "signal-failed", error: `重连 ${MAX_ATTEMPTS} 次未成功` });
+      return;
+    }
+    // peers 不拆：服务端宽限期保留房间，WebRTC 连接可能还活着；
+    // 半开的死连接由心跳超时各自清理
+    postStatus({ phase: "reconnecting", attempt: attempts });
+    setTimeout(() => { if (!stopped) connectSignal(url); }, backoffMs(attempts));
   };
   ws.onerror = () => { try { ws.close(); } catch { /* 交给 onclose 重连 */ } };
 }
@@ -43,11 +84,22 @@ function handleSignal(msg) {
   if (msg.type === "room") {
     roomCode = msg.code;
     turnCfg = msg.turn;
-    postStatus({ phase: "room", code: roomCode });
+    attempts = 0; // 房间到手才算真正连上，重置退避
+    localStorage.setItem(ROOM_KEY, roomCode);
+    postStatus({ phase: "room", code: roomCode, peers: openChannels() });
+    return;
+  }
+  if (msg.type === "room-expired") {
+    // 房间 TTL 到期（服务端主动通知）：清理并提示，不显示僵尸房号
+    teardownAll();
+    roomCode = null;
+    localStorage.removeItem(ROOM_KEY);
+    stopped = true;
+    postStatus({ phase: "room-expired", code: null, peers: 0 });
     return;
   }
   if (msg.type === "peer") {
-    // 新客户端加入：host 侧为它创建独立连接并等待该 client 的 offer
+    // 新客户端加入（或 reclaim 后服务端补通告）：host 侧为它创建独立连接并等 offer
     postStatus({ phase: "peer-joined" });
     setupPeer(msg.clientId);
     return;
@@ -62,7 +114,7 @@ function handleSignal(msg) {
   if (msg.type === "peer-left") {
     if (msg.clientId) teardownPeer(msg.clientId);
     else teardownAll();
-    postStatus({ phase: "room", code: roomCode, peers: peers.size });
+    postPeers();
     return;
   }
 }
@@ -80,34 +132,70 @@ function iceServers() {
 function setupPeer(clientId) {
   if (peers.has(clientId)) return;
   const pc = new RTCPeerConnection({ iceServers: iceServers() });
-  peers.set(clientId, { pc, channel: null });
+  peers.set(clientId, { pc, channel: null, lastPing: Date.now() });
   pc.onicecandidate = (e) => {
     if (e.candidate) ws.send(JSON.stringify({ type: "signal", to: clientId, data: { ice: e.candidate } }));
   };
   pc.onconnectionstatechange = () => {
-    postStatus({ phase: "peer-state", state: pc.connectionState });
+    // 有活设备时保持聚合显示（单台 ICE 抖动不把「已直连（N 台）」打回「建立中」）
+    const n = openChannels();
+    if (n > 0) postStatus({ phase: "connected", peers: n });
+    else postStatus({ phase: "peer-state", state: pc.connectionState, peers: 0 });
+    if (pc.connectionState === "failed") {
+      // ICE 失败不可恢复：拆掉等 client 重 join 建新连接（restartIce 留给 client 侧）
+      console.log("peer ICE failed, teardown:", clientId);
+      teardownPeer(clientId);
+      postPeers();
+    } else if (pc.connectionState === "closed") {
+      teardownPeer(clientId);
+      postPeers();
+    }
   };
   pc.ondatachannel = (e) => {
     const p = peers.get(clientId);
     if (!p) return;
     p.channel = e.channel;
-    bindChannel(p);
+    bindChannel(clientId, p);
   };
 }
 
-function bindChannel(p) {
-  p.channel.onopen = () => postStatus({ phase: "connected", peers: peers.size });
+function bindChannel(clientId, p) {
+  p.channel.onopen = () => {
+    p.lastPing = Date.now();
+    postPeers();
+  };
   p.channel.onclose = () => {
-    postStatus({ phase: "peer-joined", peers: peers.size });
+    // 设备断开必须清理 + 刷新计数（旧版只改文案不删 Map，计数永久虚高）
+    console.log("peer channel closed:", clientId);
+    teardownPeer(clientId);
+    postPeers();
   };
   p.channel.onmessage = (e) => {
+    p.lastPing = Date.now(); // 任何消息都是存活证据
     try {
       const msg = JSON.parse(e.data);
+      if (msg && msg.ping) {
+        // DataChannel 应用层心跳：client 每 5s ping，回 pong 供对端判半开
+        p.channel.send(JSON.stringify({ pong: msg.ping }));
+        return;
+      }
       console.log("peer msg:", JSON.stringify(msg));
       if (msg && msg.id) window.touchdeck.peerPress(msg.id);
     } catch { /* 非 JSON 忽略 */ }
   };
 }
+
+// 半开通道巡检：通道还 open 但 25s 无任何消息（WiFi 切网僵死等），拆掉等重连
+setInterval(() => {
+  const now = Date.now();
+  for (const [clientId, p] of Array.from(peers.entries())) {
+    if (p.channel && p.channel.readyState === "open" && now - p.lastPing > PING_TIMEOUT_MS) {
+      console.log("peer heartbeat timeout:", clientId);
+      teardownPeer(clientId);
+      postPeers();
+    }
+  }
+}, 10000);
 
 function handlePeerSignal(clientId, data) {
   const p = peers.get(clientId);
@@ -138,17 +226,23 @@ function teardownAll() {
 window.touchdeck.onPeerStart((signalUrl) => {
   const url = (signalUrl && signalUrl.trim()) || SIGNAL_DEFAULT;
   stopped = false;
-  if (ws && ws.readyState <= 1) ws.close();
+  attempts = 0;
+  if (ws && ws.readyState <= 1) { intentionalClose = true; ws.close(); }
   teardownAll();
   connectSignal(url);
 });
 
 window.touchdeck.onPeerStop(() => {
   stopped = true;
-  try { if (ws) ws.close(); } catch {}
+  try {
+    // 人为停止：显式删房（不走 host 宽限期），设备端立即收到 peer-left
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "close-room" }));
+    if (ws) ws.close();
+  } catch {}
   teardownAll();
   roomCode = null;
-  postStatus({ phase: "idle" });
+  localStorage.removeItem(ROOM_KEY);
+  postStatus({ phase: "idle", code: null, peers: 0 });
 });
 </script>
 </body>

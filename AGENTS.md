@@ -22,7 +22,7 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 
 ## 关键路径与命令
 
-- `npm start` / `npx electron .`：运行原型。默认打开**控制台窗口**（`src/renderer/console.html`：状态总览 + 本机面板启停/形态/交互 + P2P 远程连接启停与房间码复制；「本机」= 运行面板的设备、「远程端」= 手机/平板/浏览器）并自动按配置启动面板；控制台最小化/关闭都进系统托盘（`src/assets/tray.png`，托盘「退出」结束一切）。**远程按键只走 P2P 直连**（2026-08-05 定案）：信令 `wss://api.xgwnje.cn/signal`（VPS touchdeck-signal:8790，nginx 反代）+ TURN 中继 `212.135.41.88:3478`（coturn）；无任何服务器按键转发（旧 server.mjs/frp 链路已彻底删除，frpc 计划任务与 VPS frps 已停）；信令/中继故障时**无 HTTP 回退**，P2P 失败即提示未连接。控制台/面板按需启动（桌面快捷方式 `TouchDeck`），不设开机自启。`touchdeck.config.json` 加 `"ui": { "mode": "bubble" }` 切悬浮球模式；悬浮球输入方式 `ui.input`（`mouse`/`touch`，控制台可切）。**面板可单独启停**（`console-toggle-panel`，状态持久化 `touchdeck.state.json` 的 `panel` 字段）：只用安卓/平板端时关闭本机面板避免双悬浮球；面板关闭状态下 `startPanel`（含 display-metrics-changed 重建）一律不启动。交互/手势/拖球细节见 docs/touchdeck-notes.md。
+- `npm start` / `npx electron .`：运行原型。默认打开**控制台窗口**（`src/renderer/console.html`：状态总览 + 本机面板启停 + P2P 远程连接启停与房间码复制；「本机」= 运行面板的设备、「远程端」= 手机/平板/浏览器）并自动按配置启动面板；控制台最小化/关闭都进系统托盘（`src/assets/tray.png`，托盘「退出」结束一切）。**远程按键只走 P2P 直连**（2026-08-05 定案）：信令 `wss://api.xgwnje.cn/signal`（VPS touchdeck-signal:8790，nginx 反代）+ TURN 中继 `212.135.41.88:3478`（coturn）；无任何服务器按键转发（旧 server.mjs/frp 链路已彻底删除，frpc 计划任务与 VPS frps 已停）；信令/中继故障时**无 HTTP 回退**，P2P 失败即提示未连接。控制台/面板按需启动（桌面快捷方式 `TouchDeck`），不设开机自启。**本机面板固定悬浮球 + 键鼠交互**（2026-08-05 定案：网格模式与触控滑选手势已移除，`ui.mode`/`ui.input` 配置项废弃；触控滑选归安卓端）。**面板可单独启停**（`console-toggle-panel`，状态持久化 `touchdeck.state.json` 的 `panel` 字段）：只用安卓/平板端时关闭本机面板避免双悬浮球；面板关闭状态下 `startPanel`（含 display-metrics-changed 重建）一律不启动。P2P 健壮性（2026-08-05）：双端断线自动重连（指数退避+上限）+ DataChannel 心跳判半开 + host 闪断房间宽限期/reclaim（房号不变免重配）+ 房间 TTL 到期主动通知控制台。交互/手势/拖球细节见 docs/touchdeck-notes.md。
 - `npm run build:assets` / `node scripts/build-panel-assets.mjs`：从配置包生成安卓离线资源 `android/app/src/main/assets/panel.json` + `icons/`（配置/图标完全离线，无服务器分发）；改配置后重新生成 + `gradlew assembleDebug` 重装。
 - `android/`：悬浮球 App（Kotlin 薄壳 + 原生径向菜单）。启动时从**离线 assets** 加载 `panel.json` 与图标（无网络依赖）；P2P 连接（MainActivity 高级设置输入房间码 → `P2PState`，`P2PClient.kt` 用 webrtc-sdk 125 + Java-WebSocket 打洞）建立 DataChannel 后，选中按钮经 DataChannel 发送 `{id}`（keys 解析在 Windows 端，App 只发 id）。无服务器配置/图标拉取、无 HTTP 按键回传。一个房间支持 8 台设备同时连（clientId 路由；控制台显示「已直连（N 台设备）」）。安卓坑（MIUI 坐标偏移/Toast 拦截/重装权限重置）与交互手势见 docs/touchdeck-notes.md。
 - `touchdeck.config.json`：用户配置——选择主题/布局 + 行为微调（唯一面向用户的配置入口）。
@@ -30,7 +30,8 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 - `layouts/<名>.json`：布局资源包（网格/位置/缩放 + 按钮清单 + 文字显隐）。
 - `icons/<名>.svg`：按钮图标（Lucide 描边风格，currentColor 继承主题色）。
 - `src/main.js`：主进程——无框置顶窗口、配置解析（`resolveConfig`）、按键注入（@nut-tree/nut-js）、窗口移动（koffi → SetWindowPos）、P2P 中继（`registerPeerIpc`，peer-press → sendKeys）。
-- `src/renderer/index.html`：渲染引擎——主题令牌注入 CSS 变量，布局驱动网格，分组样式按主题动态生成。
+- `src/renderer/bubble.html` / `menu.html`：悬浮球与全屏径向菜单（键鼠：点球或按住 Tab 展开、hover 高亮、左击或松 Tab 确认）。
+- `src/renderer/console.html` / `peer.html`：控制台 UI；P2P host（隐藏窗口跑 WebRTC）。
 - `prototype/visual-lab.html`：UI 参数实测页（尺寸/透明度/反馈/布局），双击浏览器打开 F11 全屏用。
 
 ## 发包（Release，Agent 收到「发包」指令时的唯一流程）

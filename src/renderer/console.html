@@ -56,13 +56,6 @@
   .addr .mono { flex: 1; }
   .addr .copy-hint { color: #4ade80; font-size: 12px; flex: none; display: none; }
 
-  #advToggle { color: #9ac8ff; font-size: 13px; padding: 6px 0; cursor: pointer; }
-  #advBody { display: none; margin-top: 8px; }
-  #advBody.open { display: block; }
-  #tokenBox { display: flex; gap: 8px; align-items: center; }
-  #token { flex: 1; font-family: Consolas, monospace; font-size: 13px;
-    color: #9ac8ff; background: #1b1b20; border: 1px solid #33333a;
-    border-radius: 6px; padding: 8px 10px; word-break: break-all; line-height: 1.5; }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
     background: rgba(40, 40, 46, .95); color: #fff; font-size: 13px; padding: 8px 14px;
     border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
@@ -80,24 +73,10 @@
 
 <div class="card">
   <h2>本机面板</h2>
-  <div class="desc">悬浮球 / 网格快捷键面板。远程端（手机、平板）在用时，可关闭本机面板避免重复。</div>
+  <div class="desc">悬浮球快捷键面板（键鼠交互：点球或按住 Tab 展开）。远程端（手机、平板）在用时，可关闭本机面板避免重复。</div>
   <div class="row">
     <span class="label" id="panelState">…</span>
     <button id="panelBtn" class="main">…</button>
-  </div>
-  <div class="seg-row">
-    <span class="label" style="flex:none;width:48px">形态</span>
-    <div class="seg" id="modeSeg">
-      <button data-mode="bubble">悬浮球</button>
-      <button data-mode="grid">网格面板</button>
-    </div>
-  </div>
-  <div class="seg-row">
-    <span class="label" style="flex:none;width:48px">交互</span>
-    <div class="seg" id="inputSeg">
-      <button data-input="mouse">键鼠</button>
-      <button data-input="touch">触控</button>
-    </div>
   </div>
 </div>
 
@@ -142,92 +121,109 @@
     }
   }
 
-  async function refresh() {
-    const s = await window.touchdeck.consoleStatus();
-    // 状态总览
+  function renderPanel(s) {
     $("ovPanel").classList.toggle("ok", s.panelRunning);
     $("ovPanelT").textContent = "面板 " + (s.panelRunning ? "运行中" : "已关闭");
-    // 本机面板
     $("panelState").textContent = s.panelRunning ? "运行中" : (s.panelDisabled ? "已关闭" : "未运行");
     $("panelBtn").textContent = s.panelRunning ? "关闭面板" : "开启面板";
     $("panelBtn").disabled = false;
-    document.querySelectorAll("#modeSeg button").forEach((b) => {
-      b.classList.toggle("active", b.dataset.mode === s.mode);
-    });
-    document.querySelectorAll("#inputSeg button").forEach((b) => {
-      b.classList.toggle("active", b.dataset.input === s.input);
-    });
+  }
+
+  async function refresh() {
+    const s = await window.touchdeck.consoleStatus();
+    renderPanel(s);
     // P2P 状态（主进程推送或轮询兜底）
     const ps = await window.touchdeck.peerStatusGet();
     renderP2P(ps);
   }
+
+  // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
+  const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
 
   function renderP2P(ps) {
     const dot = $("p2pDot");
     const label = $("p2pState");
     const btn = $("p2pBtn");
     const room = $("addrRoom");
+    btn.disabled = false;   // 渲染即恢复可点（旧版点击后只禁不恢复，按钮永久灰掉）
     $("roomCode").textContent = ps.code || "…";
     room.style.display = ps.code ? "flex" : "none";
     const ov = $("ovP2P");
     const ovT = $("ovP2PT");
-    const isLive = ps.phase === "connected" || ps.phase === "peer-joined" || ps.phase === "room" || ps.phase === "connecting";
     ov.classList.toggle("ok", ps.phase === "connected");
-    ovT.textContent = "P2P " + (ps.phase === "connected" ? "已直连" : (isLive ? "连接中" : "未开启"));
+    const peersN = ps.peers || 0;
+    const peersTxt = peersN > 0 ? `（${peersN} 台设备）` : "";
+    const stateTxt = { new: "建立中", connecting: "建立中", connected: "已直连", disconnected: "抖动断开，恢复中…", failed: "连接失败", closed: "已关闭" };
     switch (ps.phase) {
       case "connecting":
-        dot.classList.remove("ok"); label.textContent = "连接信令中…"; btn.textContent = "关闭连接"; break;
+        dot.classList.remove("ok"); label.textContent = "连接信令中…"; break;
+      case "signal-ok":
+        dot.classList.remove("ok"); label.textContent = "信令已连接，正在创建房间…"; break;
       case "room":
-        dot.classList.remove("ok"); label.textContent = "等待手机加入（30 分钟有效）"; btn.textContent = "关闭连接"; break;
+        dot.classList.remove("ok"); label.textContent = "等待手机加入（30 分钟有效）"; break;
       case "peer-joined":
-        dot.classList.remove("ok"); label.textContent = "手机已加入，正在建立直连…"; btn.textContent = "关闭连接"; break;
+        dot.classList.remove("ok"); label.textContent = "手机已加入，正在建立直连…"; break;
+      case "peer-state":
+        // ICE/连接状态变化：按实际状态显示，不再打回「未开启」谎报
+        dot.classList.toggle("ok", ps.state === "connected");
+        label.textContent = "直连状态：" + (stateTxt[ps.state] || ps.state || "未知") + peersTxt;
+        break;
       case "connected":
-        dot.classList.add("ok"); label.textContent = ps.peers > 1 ? `已直连（${ps.peers} 台设备）` : "已直连（按键将不走公网转发）"; btn.textContent = "关闭连接"; break;
-      case "signal-error":
-        dot.classList.remove("ok"); label.textContent = "信令连接失败"; btn.textContent = "重试开启"; break;
-      case "disconnected":
-        dot.classList.remove("ok"); label.textContent = "已断开"; btn.textContent = "重新开启"; break;
+        dot.classList.add("ok");
+        label.textContent = peersN > 1 ? `已直连（${peersN} 台设备）` : "已直连（按键不走公网转发）";
+        break;
+      case "peer-error":
+        dot.classList.remove("ok"); label.textContent = "协商出错：" + (ps.error || "未知"); break;
       case "reconnecting":
-        dot.classList.remove("ok"); label.textContent = "信令断线，自动重连中…"; btn.textContent = "关闭连接"; break;
+        dot.classList.remove("ok"); label.textContent = "信令断线，自动重连中…" + (ps.attempt ? `（第 ${ps.attempt} 次）` : ""); break;
+      case "room-expired":
+        dot.classList.remove("ok"); label.textContent = "房间已过期，请重新开启"; break;
+      case "signal-failed":
+        dot.classList.remove("ok"); label.textContent = "信令重连失败（" + (ps.error || "已达上限") + "）"; break;
       default:
-        dot.classList.remove("ok"); label.textContent = "未开启"; btn.textContent = "开启连接";
+        dot.classList.remove("ok"); label.textContent = "未开启";
     }
+    const active = P2P_ACTIVE.includes(ps.phase);
+    btn.textContent = active ? "关闭连接" : "开启连接";
+    ovT.textContent = "P2P " + (ps.phase === "connected" ? "已直连" : (active ? "连接中" : "未开启"));
   }
 
   $("panelBtn").addEventListener("click", async () => {
     $("panelBtn").disabled = true;
-    await window.touchdeck.consoleTogglePanel();
-    refresh();
-  });
-  document.querySelectorAll("#modeSeg button").forEach((b) => {
-    b.addEventListener("click", async () => {
-      await window.touchdeck.consoleSetMode(b.dataset.mode);
-      refresh();
-    });
-  });
-  document.querySelectorAll("#inputSeg button").forEach((b) => {
-    b.addEventListener("click", async () => {
-      await window.touchdeck.consoleSetInput(b.dataset.input);
-      refresh();
-    });
+    try {
+      await window.touchdeck.consoleTogglePanel();
+      await refresh();
+    } catch (e) {
+      toast("面板操作失败：" + e);
+      $("panelBtn").disabled = false;
+    }
   });
   $("p2pBtn").addEventListener("click", async () => {
     $("p2pBtn").disabled = true;
-    const ps = await window.touchdeck.peerStatusGet();
-    if (ps && (ps.phase === "room" || ps.phase === "connecting" || ps.phase === "peer-joined" || ps.phase === "connected")) {
-      await window.touchdeck.peerStop();
-    } else {
-      await window.touchdeck.peerStart();
+    try {
+      const ps = await window.touchdeck.peerStatusGet();
+      if (ps && P2P_ACTIVE.includes(ps.phase)) {
+        await window.touchdeck.peerStop();
+      } else {
+        await window.touchdeck.peerStart();
+      }
+      await refresh();
+    } catch (e) {
+      toast("P2P 操作失败：" + e);
+      $("p2pBtn").disabled = false;
     }
-    refresh();
   });
   $("addrRoom").addEventListener("click", () => {
     copyText($("roomCode").textContent, $("addrRoom").querySelector(".copy-hint"));
   });
   window.touchdeck.onPeerStatus((ps) => renderP2P(ps));
+  window.touchdeck.onPanelStatus((s) => renderPanel(s));
+  window.touchdeck.onPeerPressFailed((id) => toast("远程按键注入失败：" + id));
 
   refresh();
-  setInterval(refresh, 4000);
+  // 隐藏进托盘后暂停轮询，回前台立即补一次
+  setInterval(() => { if (!document.hidden) refresh(); }, 4000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body>
 </html>

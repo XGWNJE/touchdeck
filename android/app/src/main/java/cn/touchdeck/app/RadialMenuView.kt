@@ -25,9 +25,9 @@ import kotlin.math.sin
  * 布局规则（2026-08-03 定稿）：
  * 每个按钮的展示面积全场景相等——按钮弧长 L 与环厚 T 是固定 dp 常量，
  * 每环槽位数 = round(展开角 × 环中半径 ÷ L)（屏幕越大每环自然放越多）。
- * 槽位逐个做可见性检查（扇区中点落在屏内才可用），被屏幕边缘挡住的槽位跳过、
+ * 槽位逐个做完整可见性检查（扇区四角+内外弧中点全在屏内才可用），被屏幕边缘挡住的槽位跳过、
  * 按钮顺延到下一个可见槽位——裁掉的是环上的角度，不是按键；
- * 逐环外扩直到所有按键落位（某环一个可见槽位都没有时停止）。
+ * 逐环外扩直到所有按键落位（某环一个可见槽位都没有时停止；仍有丢弃则日志告警）。
  * 支持点按与按住滑动扫选。
  */
 class RadialMenuView(
@@ -35,6 +35,8 @@ class RadialMenuView(
     private val cx: Float,
     private val cy: Float,
     private val items: List<Item>,
+    viewW: Float = 0f,
+    viewH: Float = 0f,
     private val onDismiss: () -> Unit,
     private val onSelect: (id: String, label: String) -> Unit
 ) : View(context) {
@@ -44,8 +46,10 @@ class RadialMenuView(
     /** 一个落位的扇区：环半径区间 + 角度区间 + 占据它的按键 */
     private class Slot(val inner: Float, val outer: Float, val a0: Float, val a1: Float, val item: Item)
 
-    private val screenW = resources.displayMetrics.widthPixels.toFloat()
-    private val screenH = resources.displayMetrics.heightPixels.toFloat()
+    // MIUI 展开层从状态栏之下开始（比物理屏矮一截），真实可视高由 BubbleService 挂好后传入；
+    // 未传入回退 displayMetrics（此时底部判定会偏松）
+    private val screenW = if (viewW > 0f) viewW else resources.displayMetrics.widthPixels.toFloat()
+    private val screenH = if (viewH > 0f) viewH else resources.displayMetrics.heightPixels.toFloat()
 
     private fun dp(v: Float): Float =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
@@ -100,24 +104,46 @@ class RadialMenuView(
                 if (idx >= items.size) break
                 val a0 = startAngle + per * s
                 val a1 = a0 + per
-                // 可见性：扇区中点（图标位）落在屏内才算可用槽位，被挡的跳过、按键顺延
-                val mid = Math.toRadians(((a0 + a1) / 2f).toDouble())
-                val px = cx + (rMid * cos(mid)).toFloat()
-                val py = cy + (rMid * sin(mid)).toFloat()
-                if (px >= visMargin && px <= screenW - visMargin && py >= visMargin && py <= screenH - visMargin) {
+                // 按钮完整可见：按钮内容区（图标盒+文字盒，中角方向）完整在屏内才可落位
+                // （不查扇区角尖——贴角锚点楔形角尖必然越界，全扇区检查会把首环整环卡死；
+                //   2026-08-05 真机 MIUI 状态栏锚点实测 0/12）；被挡槽位跳过、按键顺延外环
+                if (slotButtonVisible(inner, outer, a0, a1, visMargin)) {
                     slots.add(Slot(inner, outer, a0, a1, items[idx]))
                     idx++
                     usable++
                 }
             }
-            // 这一环一个槽位都露不出来，再往外更不可能——空间真的用完了
-            if (usable == 0) break
+            // 锚点在屏外（MIUI 状态栏）时首环可能整环不可见，外环反而伸得回屏内——
+            // 只有内径超过屏幕对角线（任何点都不可能可见）才真的没空间
+            if (usable == 0 && inner > hypot(screenW, screenH)) break
             ring++
         }
-        android.util.Log.d(
-            "TouchDeck",
-            "menu init slots=${slots.size}/${items.size} rings=$ring start=$startAngle sweep=$sweepAngle"
-        )
+        if (slots.size < items.size) {
+            android.util.Log.w(
+                "TouchDeck",
+                "menu DROPPED: placed ${slots.size}/${items.size} rings=$ring start=$startAngle sweep=$sweepAngle"
+            )
+        } else {
+            android.util.Log.d(
+                "TouchDeck",
+                "menu init slots=${slots.size}/${items.size} rings=$ring start=$startAngle sweep=$sweepAngle"
+            )
+        }
+    }
+
+    /** 按钮完整可见判定：图标盒与文字盒（中角方向，半宽 half）都完整落在屏内（含 margin） */
+    private fun slotButtonVisible(inner: Float, outer: Float, a0: Float, a1: Float, margin: Float): Boolean {
+        val mid = Math.toRadians(((a0 + a1) / 2f).toDouble())
+        val thick = outer - inner
+        val half = dp(18f) // 图标 24dp/2 + 余量；文字盒近似同量级
+        val dirX = cos(mid).toFloat()
+        val dirY = sin(mid).toFloat()
+        for (r in floatArrayOf(inner + thick * 0.38f, inner + thick * 0.76f)) {
+            val px = cx + r * dirX
+            val py = cy + r * dirY
+            if (px - half < margin || px + half > screenW - margin || py - half < margin || py + half > screenH - margin) return false
+        }
+        return true
     }
 
     // C 皮肤（极简发光 HUD）：发丝白线勾环与径向分割，选中扇区一道青色发光外弧；

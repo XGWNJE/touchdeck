@@ -28,8 +28,8 @@
 <div id="flash"></div>
 <script>
 // 径向菜单（Windows 版，复刻安卓 RadialMenuView）：
-// 等面积分环（弧长/环厚恒定）+ 逐槽可见性检查 + C 皮肤（黑透底、发丝线、
-// 选中青色发光三描边近似）。滑选模式由球窗口转发坐标驱动高亮。
+// 等面积分环（弧长/环厚恒定）+ 逐槽完整可见性检查（放不下顺延外环）+
+// C 皮肤（黑透底、发丝线、选中青色发光三描边近似）。键鼠交互：hover 高亮 + 左击/松 Tab 确认。
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 const stage = document.getElementById("stage");
@@ -91,18 +91,38 @@ function layoutMenu(anchor, screen, buttons, layout) {
     for (let s = 0; s < nominal; s++) {
       if (idx >= buttons.length) break;
       const a0 = start + per * s, a1 = a0 + per;
-      const mid = ((a0 + a1) / 2) * DEG;
-      const px = cx + rMid * Math.cos(mid);
-      const py = cy + rMid * Math.sin(mid);
-      if (px >= visMargin && px <= screen.width - visMargin && py >= visMargin && py <= screen.height - visMargin) {
+      if (slotButtonVisible(cx, cy, inner, outer, a0, a1, screen, visMargin)) {
         slots.push({ inner, outer, a0, a1, item: buttons[idx] });
         idx++; usable++;
       }
     }
-    if (usable === 0) break;
+    // 锚点贴角/出屏时首环可能整环不可见，外环反而伸得回屏内——
+    // 只有内径超过屏幕对角线（任何点都不可能可见）才真的没空间
+    if (usable === 0 && inner > Math.hypot(screen.width, screen.height)) break;
     ring++;
   }
+  // 排不下的按钮必须显形：宁可加外环也不裁按钮；仍有丢弃（16 环硬上限）时日志告警
+  if (slots.length < buttons.length) {
+    console.warn(`menu layout DROPPED: placed ${slots.length}/${buttons.length}, anchor=(${cx},${cy})`);
+  } else {
+    console.log(`menu layout slots=${slots.length}/${buttons.length} rings=${ring + 1} anchor=(${cx},${cy})`);
+  }
   return { cx, cy, slots };
+}
+
+// 按钮完整可见判定：按钮内容区（图标盒 + 文字盒，中角方向）完整落在屏内（含 margin）才可落位。
+// 不查扇区角尖——贴角锚点楔形角尖必然越界，全扇区检查会把首环整环卡死（2026-08-05 实测）。
+// 被挡槽位跳过、按钮顺延外环。
+function slotButtonVisible(cx, cy, inner, outer, a0, a1, screen, m) {
+  const mid = ((a0 + a1) / 2) * DEG;
+  const thick = outer - inner;
+  const half = 18; // 图标 24px/2 + 余量；文字盒近似同量级
+  const dirX = Math.cos(mid), dirY = Math.sin(mid);
+  for (const r of [inner + thick * 0.38, inner + thick * 0.76]) {
+    const px = cx + r * dirX, py = cy + r * dirY;
+    if (px - half < m || px + half > screen.width - m || py - half < m || py + half > screen.height - m) return false;
+  }
+  return true;
 }
 
 function hit(x, y) {
@@ -204,9 +224,7 @@ function flashLabel(text) {
   flashTimer = setTimeout(() => flash.classList.remove("show"), 900);
 }
 
-// ---- docked 常驻菜单：两模式共用事件（mouse：hover 待选中 + 左击确认；
-// touch：按下即高亮 + 松手确认；两种确认都是 pointerup）----
-let inputMode = "touch";
+// ---- 键鼠交互：hover 待选中 + 左击确认；或按住 Tab 展开、松开 Tab 确认悬停项 ----
 let ballRadius = 40;
 
 function confirmAt(x, y) {
@@ -246,16 +264,6 @@ window.touchdeck.onMenuConfirm(() => {
   }
 });
 
-// ---- 滑选模式（slide，触控）：高亮跟随由球窗口转发 ----
-window.touchdeck.onMenuPointer((px, py, action) => {
-  const i = hit(px, py);
-  if (action === "move") {
-    if (i !== pressedIndex) { pressedIndex = i; draw(); }
-  } else if (action === "up") {
-    confirmAt(px, py);
-  }
-});
-
 async function loadIcon(name) {
   if (iconCache.has(name)) return;
   iconCache.set(name, null);  // 占位防重复请求
@@ -276,9 +284,8 @@ async function loadIcon(name) {
 }
 
 window.touchdeck.onMenuInit(async (init) => {
-  const { anchor, mode, ballSize: bs, input, screen } = init;
+  const { anchor, ballSize: bs, screen } = init;
   if (bs) ballSize = bs;
-  if (input) inputMode = input;
   const config = await window.touchdeck.getConfig();
   state = layoutMenu(anchor, screen, config.buttons, config.layout);
   ballRadius = ballSize / 2 + 6;
