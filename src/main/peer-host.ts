@@ -1,0 +1,51 @@
+// ===== P2P 中继（隐藏窗口跑 WebRTC，DataChannel 按键 → 本地注入）=====
+import { app, BrowserWindow, ipcMain } from "electron";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ROOT, wins, peerStatusBox } from "./state";
+import { enqueueAction } from "./macro";
+import { broadcastButtons } from "./foreground";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
+const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
+
+function createPeerWindow(): void {
+  if (wins.peer && !wins.peer.isDestroyed()) return;
+  const peerWin = new BrowserWindow({
+    width: 1, height: 1, show: false, frame: false, skipTaskbar: true,
+    webPreferences: { preload: PRELOAD, contextIsolation: true },
+  });
+  wins.peer = peerWin;
+  if (!app.isPackaged && RENDERER_URL) peerWin.loadURL(`${RENDERER_URL}/peer/`);
+  else peerWin.loadFile(path.join(ROOT, "out", "renderer", "peer", "index.html"));
+  peerWin.webContents.on("console-message", (_e, _l, msg) => console.log("[peer]", msg));
+  peerWin.on("closed", () => { wins.peer = null; });
+}
+
+export function registerPeerIpc(): void {
+  ipcMain.on("peer-status", (_e, s) => {
+    peerStatusBox.value = { ...peerStatusBox.value, ...s };
+    if (wins.console && !wins.console.isDestroyed()) {
+      wins.console.webContents.send("peer-status", peerStatusBox.value);
+    }
+  });
+  ipcMain.handle("peer-start", (_e, signalUrl) => {
+    createPeerWindow();
+    peerStatusBox.value = { phase: "connecting" };
+    wins.peer!.webContents.send("peer-start", signalUrl || null);
+    return { ok: true };
+  });
+  ipcMain.handle("peer-stop", () => {
+    if (wins.peer && !wins.peer.isDestroyed()) wins.peer.webContents.send("peer-stop");
+    peerStatusBox.value = { phase: "idle" };
+    return { ok: true };
+  });
+  ipcMain.handle("peer-status-get", () => peerStatusBox.value);
+  ipcMain.on("peer-press", (_e, buttonId) => {
+    const r = enqueueAction(buttonId, "peer");
+    if (r.ok) console.log("[touchdeck] peer press", buttonId);
+  });
+  // 设备通道上线：把当前有效按钮集推下去（安卓动态渲染；离线 panel.json 仅兜底）
+  ipcMain.on("peer-channel-open", () => broadcastButtons());
+}

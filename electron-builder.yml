@@ -3,7 +3,12 @@ productName: TouchDeck
 directories:
   output: dist
 files:
-  - src/**/*
+  - out/**/*
+  - touchdeck.config.json
+  - layouts/**/*
+  - themes/**/*
+  - icons/**/*
+  - src/assets/**/*
   - package.json
   - node_modules/**/*
 win:

@@ -14,7 +14,8 @@ const logEl = document.getElementById("log");
 const ta = document.getElementById("ta");
 function log(s) { logEl.textContent += s + "\\n"; logEl.scrollTop = logEl.scrollHeight; }
 for (const ev of ["keydown", "keyup", "paste", "input"]) {
-  ta.addEventListener(ev, (e) => log(ev + (e.key ? ":" + e.key : "") + (e.ctrlKey ? "+ctrl" : "")));
+  // 挂 document：点击 log 区会把焦点挪到 body，挂 textarea 会漏记（2026-08-06 实证）
+  document.addEventListener(ev, (e) => log(ev + (e.key ? ":" + e.key : "") + (e.ctrlKey ? "+ctrl" : "") + (document.activeElement === ta ? "" : "[焦点不在文本区]")));
 }
 window.__dump = () => ({ text: ta.value, log: logEl.textContent });
 window.__reset = () => { ta.value = ""; logEl.textContent = ""; };

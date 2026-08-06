@@ -1,12 +1,10 @@
 // 生成 Android 原生面板资源：panel.json（布局+主题+按钮）+ 主题 PNG 图标副本。
 // 产物进 android assets，App 离线用原生 View 渲染（未连接兜底）；连接后按钮集由 host 经 DataChannel 下发。
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-// 共享配置解析（CJS 模块，default import 后解构；2026-08-05 修复：旧指向已删除的 server.mjs）
-import configResolve from "../src/config-resolve.js";
-
-const { resolveConfig, resolveIcon } = configResolve;
+// 运行方式：npm run build:assets（tsx 直跑本文件，与主进程共用 src/shared/config-resolve.ts 单一事实源）
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveConfig, resolveIcon, type PanelButton } from "../src/shared/config-resolve";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const config = resolveConfig();
@@ -16,7 +14,7 @@ fs.mkdirSync(iconsDir, { recursive: true });
 
 // 平板原生端尺寸系数：Windows 120px 基线在 8.8 寸屏实测偏大（v0.2.0 反馈），减半。
 const ANDROID_SCALE = 0.5;
-const scaled = (n) => Math.max(1, Math.round(n * ANDROID_SCALE));
+const scaled = (n: number) => Math.max(1, Math.round(n * ANDROID_SCALE));
 
 const panel = {
   behavior: { confirmSeconds: config.behavior.confirmSeconds ?? 2.5 },
@@ -40,8 +38,8 @@ const panel = {
     },
   },
   // aux 常驻键在前（占内环起始槽位），与布局按钮同 id 去重（aux 优先）——与 Windows 端同规则
-  buttons: [...config.auxButtons, ...config.buttons.filter((lb) => !config.auxButtons.some((a) => a.id === lb.id))]
-    .map((b) => ({
+  buttons: [...config.auxButtons, ...config.buttons.filter((lb: PanelButton) => !config.auxButtons.some((a) => a.id === lb.id))]
+    .map((b: PanelButton) => ({
       id: b.id, icon: b.icon, label: b.label, sub: b.sub,
       group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux,
     })),
@@ -49,7 +47,7 @@ const panel = {
 
 let copied = 0;
 for (const b of panel.buttons) {
-  const res = resolveIcon(config.themeName, b.icon);
+  const res = resolveIcon(config.themeName, b.icon!);
   if (res && res.kind === "png") {
     const base64 = res.data.replace(/^data:image\/png;base64,/, "");
     fs.writeFileSync(path.join(iconsDir, `${b.icon}.png`), Buffer.from(base64, "base64"));
