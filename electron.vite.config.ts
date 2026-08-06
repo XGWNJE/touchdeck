@@ -1,6 +1,8 @@
 // electron-vite 配置：主/preload/渲染三端统一构建，渲染层四页多入口。
 // preload 必须 CJS（渲染进程默认 sandbox，ESM preload 不兼容）→ 强制 cjs 输出 + .cjs 后缀。
 import { defineConfig } from "electron-vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
 
 const root = import.meta.dirname;
@@ -23,6 +25,7 @@ export default defineConfig({
   },
   renderer: {
     root: "src/renderer",
+    plugins: [react(), tailwindcss()],
     build: {
       outDir: "out/renderer",
       rollupOptions: {

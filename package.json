@@ -17,13 +17,20 @@
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
     "koffi": "^3.1.4",
-    "lucide-static": "^1.28.0"
+    "lucide-static": "^1.28.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.7",
     "typescript": "^7.0.2"
   }

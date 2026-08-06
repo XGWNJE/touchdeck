@@ -33,7 +33,10 @@ export function registerPeerIpc(): void {
   ipcMain.handle("peer-start", (_e, signalUrl) => {
     createPeerWindow();
     peerStatusBox.value = { phase: "connecting" };
-    wins.peer!.webContents.send("peer-start", signalUrl || null);
+    // 页面加载完成前 send 会丢消息（模块脚本比旧内联脚本慢一拍，2026-08-06 实证 stuck 在 connecting）
+    const send = () => wins.peer && !wins.peer.isDestroyed() && wins.peer.webContents.send("peer-start", signalUrl || null);
+    if (wins.peer!.webContents.isLoading()) wins.peer!.webContents.once("did-finish-load", send);
+    else send();
     return { ok: true };
   });
   ipcMain.handle("peer-stop", () => {

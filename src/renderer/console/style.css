@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* 控制台少量定制件（圆点发光/toast 动画），其余全部 Tailwind 工具类 */
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #17171b;
+  color: #e8e8ea;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.dot-glow { box-shadow: 0 0 7px #4ade80; }
