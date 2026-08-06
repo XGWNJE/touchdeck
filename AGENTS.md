@@ -71,6 +71,7 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 
 - `README.md`：面向人——项目定位、使用方式（含 P2P 远程说明）。
 - `AGENTS.md`：面向 Agent——项目铁律、命令、验证要求。
+- `docs/roadmap.md`：产品路线——定位、自定义能力边界（声明式 vs 编程）、场景预设包、版本排期（2026-08-06 定案）。
 - `docs/touchdeck-notes.md`：知识沉淀——踩坑实证、布局/皮肤规范、交互手势细节（AGENTS.md 的细节索引指向此处）。
 - `touchdeck.config.json`：按钮与 UI 参数事实来源。
 
