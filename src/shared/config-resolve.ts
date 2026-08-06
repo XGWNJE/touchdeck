@@ -12,6 +12,31 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(HERE, "..", "..");
 export const CONFIG_PATH = path.join(ROOT, "touchdeck.config.json");
 
+// ---- 外置配置目录（2026-08-06，v0.2.1）----
+// 打包版 asar 只读：用户配置/状态必须外置 userData 才可改可持久化。
+// 主进程启动时 setExternalConfigDir(app.getPath("userData"))（仅打包版；dev 仍用仓库根，保持改仓库配置即热重载的工作流）。
+// 查找顺序一律外置优先、 bundled 兜底：用户可往 userData 丢自定义 layouts/themes/icons 覆盖包内资源。
+let externalDir: string | null = null;
+export function setExternalConfigDir(dir: string | null): void { externalDir = dir; }
+export function getExternalConfigDir(): string | null { return externalDir; }
+
+// 生效的用户配置文件路径（热重载监听目标）
+export function effectiveConfigPath(): string {
+  if (externalDir) {
+    const p = path.join(externalDir, "touchdeck.config.json");
+    if (fs.existsSync(p)) return p;
+  }
+  return CONFIG_PATH;
+}
+
+// 资源包 JSON（layouts/xxx.json、themes/xxx/theme.json）：外置优先，包内兜底
+function loadPackJson(rel: string): any {
+  if (externalDir) {
+    try { return loadJson(path.join(externalDir, rel)); } catch { /* 落包内 */ }
+  }
+  return loadJson(path.join(ROOT, rel));
+}
+
 // ---- 类型 ----
 export interface KeyCombo {
   ctrl?: boolean; shift?: boolean; alt?: boolean; win?: boolean;
@@ -147,10 +172,10 @@ export function matchTarget(target: ButtonTarget | undefined | null, fg: Foregro
 
 function resolveLayout(layoutName: string): any {
   try {
-    return loadJson(path.join(ROOT, "layouts", `${layoutName}.json`));
+    return loadPackJson(path.join("layouts", `${layoutName}.json`));
   } catch (e: any) {
     console.error(`[touchdeck] 布局 "${layoutName}" 加载失败（${e.message}），回退 left-dock`);
-    return loadJson(path.join(ROOT, "layouts", "left-dock.json"));
+    return loadPackJson(path.join("layouts", "left-dock.json"));
   }
 }
 
@@ -176,16 +201,16 @@ export function resolveConfig(): ResolvedConfig {
 }
 
 function resolveConfigFresh(): ResolvedConfig {
-  const user = loadJson(CONFIG_PATH);
+  const user = loadJson(effectiveConfigPath());
   const themeName = user.theme || "default";
   const layoutName = user.layout || "left-dock";
 
   let theme;
   try {
-    theme = loadJson(path.join(ROOT, "themes", themeName, "theme.json"));
+    theme = loadPackJson(path.join("themes", themeName, "theme.json"));
   } catch (e: any) {
     console.error(`[touchdeck] 主题 "${themeName}" 加载失败（${e.message}），回退 default`);
-    theme = loadJson(path.join(ROOT, "themes", "default", "theme.json"));
+    theme = loadPackJson(path.join("themes", "default", "theme.json"));
   }
 
   const layout = resolveLayout(layoutName);
@@ -223,7 +248,7 @@ function resolveConfigFresh(): ResolvedConfig {
       }
       if (sc.layout) {
         try {
-          loadJson(path.join(ROOT, "layouts", `${sc.layout}.json`));
+          loadPackJson(path.join("layouts", `${sc.layout}.json`));
         } catch (e: any) {
           errors.push(`scenarios[${i}](${sc.name}): 布局 "${sc.layout}" 加载失败（${e.message}）`);
           return null;
@@ -273,15 +298,18 @@ export function effectiveButtons(config: ResolvedConfig, scenarioButtons: PanelB
   return [...config.auxButtons, ...rest];
 }
 
-// 图标解析（优先级从高到低）：themes/<主题>/icons/<name>.svg|png → icons/<name>.svg。
+// 图标解析（优先级从高到低）：[外置]themes/<主题>/icons/<name>.svg|png → [外置]icons/<name>.svg → 包内同名。
 // 返回 { kind: "svg"|"png", data }；找不到返回 null（渲染端回退文字）。
 export function resolveIcon(themeName: string, name: string): IconResolved | null {
   if (!/^[a-z0-9-]+$/.test(name)) return null;
-  const candidates = [
-    path.join(ROOT, "themes", themeName, "icons", `${name}.svg`),
-    path.join(ROOT, "themes", themeName, "icons", `${name}.png`),
-    path.join(ROOT, "icons", `${name}.svg`),
+  const rel = [
+    path.join("themes", themeName, "icons", `${name}.svg`),
+    path.join("themes", themeName, "icons", `${name}.png`),
+    path.join("icons", `${name}.svg`),
   ];
+  const candidates = externalDir
+    ? [...rel.map((r) => path.join(externalDir!, r)), ...rel.map((r) => path.join(ROOT, r))]
+    : rel.map((r) => path.join(ROOT, r));
   for (const p of candidates) {
     try {
       const buf = fs.readFileSync(p);

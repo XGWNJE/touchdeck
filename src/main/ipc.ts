@@ -32,9 +32,13 @@ export function registerCommonIpc(): void {
 
   // 临时诊断：截全屏验证窗口真实可见性（desktopCapturer 走 WGC，能抓透明分层窗口）
   ipcMain.handle("debug-shot", async () => {
-    const size = screen.getPrimaryDisplay().size;
-    const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size });
-    fs.writeFileSync(path.join(ROOT, "prototype", "screen-dbg.png"), sources[0].thumbnail.toPNG());
+    try {
+      const size = screen.getPrimaryDisplay().size;
+      const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size });
+      fs.writeFileSync(path.join(ROOT, "prototype", "screen-dbg.png"), sources[0].thumbnail.toPNG());
+    } catch (e: any) {
+      console.error("[touchdeck] debug-shot 失败（打包版 asar 只读属预期）:", e.message);
+    }
   });
 }
 

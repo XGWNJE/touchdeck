@@ -1,6 +1,6 @@
 // 跨模块共享的运行时状态与路径：窗口句柄、前台快照、图标缓存、状态持久化、边界夹取。
 // 集中一处持有，避免模块间互传变量造成环形引用。
-import { BrowserWindow, screen } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // out/main/ 上溯两级 = 包根（dev=项目根，打包=asar 根）
 export const ROOT = path.join(HERE, "..", "..");
 export const CONFIG_PATH = path.join(ROOT, "touchdeck.config.json");
-export const STATE_PATH = path.join(ROOT, "touchdeck.state.json");
+// 打包版 asar 只读：状态文件（面板启停/球位置）外置 userData 才存得住；dev 仍用仓库根（2026-08-06 实证：
+// asar 内 saveState 静默失败 → 面板关闭标记存不上 → 打包版关面板后永远开不回来）
+export const STATE_PATH = app.isPackaged
+  ? path.join(app.getPath("userData"), "touchdeck.state.json")
+  : path.join(ROOT, "touchdeck.state.json");
 
 // 四个窗口句柄：球 / 全屏菜单 / 控制台 / P2P 中继（隐藏）
 export const wins: {
@@ -52,8 +56,11 @@ export function saveState(patch: Record<string, unknown>): void {
   }
 }
 
-// 记忆的窗口位置仍有足够区域落在某块屏幕内才算有效（防拔显示器后窗口飞走）
+// 记忆的窗口位置仍有足够区域落在某块屏幕内才算有效（防拔显示器后窗口飞走）。
+// 入参必须是有限数：state 里可能只有 panel 没有 x/y（从没拖过球就关面板），
+// undefined 传进 getDisplayNearestPoint 会抛 conversion failure（2026-08-06 打包版实证：关→开面板必崩）
 export function isPositionUsable(x: number, y: number, width: number, height: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   const disp = screen.getDisplayNearestPoint({ x, y });
   const a = disp.workArea;
   const overlapX = Math.min(x + width, a.x + a.width) - Math.max(x, a.x);

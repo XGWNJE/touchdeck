@@ -2,7 +2,10 @@
 // 模块划分：state（共享状态）/ win32（koffi 函数层）/ macro（宏引擎）/ foreground（前台探测+场景）/
 // windows（窗口与托盘）/ drag（拖球）/ peer-host（P2P 中继）/ hotreload（配置热重载）/ ipc（通用 IPC）。
 import { app, globalShortcut, screen } from "electron";
-import { wins } from "./state";
+import fs from "node:fs";
+import path from "node:path";
+import { ROOT, wins } from "./state";
+import { setExternalConfigDir } from "../shared/config-resolve";
 import { registerCommonIpc, registerConsoleIpc } from "./ipc";
 import { registerDragIpc } from "./drag";
 import { registerPeerIpc } from "./peer-host";
@@ -30,6 +33,20 @@ if (!gotLock) {
 }
 
 app.whenReady().then(() => {
+  // 打包版配置外置（asar 只读）：首启把包内默认配置播种到 userData，之后一律外置优先读
+  if (app.isPackaged) {
+    const dir = app.getPath("userData");
+    setExternalConfigDir(dir);
+    const target = path.join(dir, "touchdeck.config.json");
+    try {
+      if (!fs.existsSync(target)) {
+        fs.copyFileSync(path.join(ROOT, "touchdeck.config.json"), target);
+        console.log("[touchdeck] 配置播种到 userData:", target);
+      }
+    } catch (e: any) {
+      console.error("[touchdeck] 配置播种失败:", e.message);
+    }
+  }
   registerCommonIpc();
   registerConsoleIpc();
   registerDragIpc();

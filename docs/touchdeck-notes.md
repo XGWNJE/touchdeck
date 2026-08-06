@@ -85,6 +85,7 @@
 - **preload 必须保持 CJS 输出**（渲染进程默认 sandbox，ESM preload 不兼容）：electron.vite.config.ts 里 preload 强制 `format:"cjs"` + `.cjs` 后缀，窗口引用 `out/preload/index.cjs`。
 - **路径基准**：`out/main/index.js` 上溯两级 = 包根（dev=项目根，打包=asar 根）；渲染页 dev 走 `ELECTRON_RENDERER_URL`，产物/打包走 `out/renderer/<页>/index.html`。
 - **electron-builder files 必须显式带运行时数据**：`out/` + touchdeck.config.json + layouts/ + themes/ + icons/ + src/assets/——只列代码目录会把配置文件落在 asar 外，打包版启动即死（迁移时修复的存量隐患）。
+- **打包版配置/状态必须外置 userData**（2026-08-06 v0.2.1 实证）：asar 只读，saveState 静默失败 → 面板关闭标记存不上 → 控制台启停逻辑每次必读 false → 关了就永远开不回来。外置规则：主进程首启把包内默认配置播种到 `userData/touchdeck.config.json`；此后配置/状态读写全走 userData（dev 仍用仓库根，保持改仓库配置即热重载的工作流）；layouts/themes/icons 外置优先、包内兜底（用户可往 userData 丢自定义包）；热重载监听 userData 根目录（文件名过滤，state.json 回写防循环）。
 - **React 壳包 canvas 的范式**：CSS 原样留页头（选择器契约不变），逻辑进 `main.tsx`，高频 pointer 事件走 ref + body.classList 直操，不走 React state（零重渲染，行为逐行等价）。
 - **@vitejs/plugin-react 须 ^5**：^6 要 vite 8，与 electron-vite 5 的 vite ^7 冲突。
 - **真机 Clash VPN 下 ICE 周期性 DISCONNECTED→FAILED→自愈**（约每分钟一次）：属预期现象，连接保持 open 不干预即可，勿因此拆连接。
