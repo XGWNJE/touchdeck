@@ -148,6 +148,24 @@
       "aux": false
     },
     {
+      "id": "continue",
+      "icon": "play",
+      "label": "继续",
+      "sub": "继续执行",
+      "group": "agent",
+      "confirm": false,
+      "aux": false
+    },
+    {
+      "id": "clear-input",
+      "icon": "eraser",
+      "label": "清空",
+      "sub": "清空输入框",
+      "group": "edit",
+      "confirm": false,
+      "aux": false
+    },
+    {
       "id": "at",
       "icon": "at-sign",
       "label": "文件",

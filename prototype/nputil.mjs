@@ -97,7 +97,10 @@ if (cmd === "focus" || cmd === "forcefocus") {
   await new Promise((r) => setTimeout(r, 200));
   await combo(nut.Key.C);
   await new Promise((r) => setTimeout(r, 300));
-  console.log("copied");
+  // 复制后直接读剪贴板原文输出（前 200 字），验证链路要用
+  const { execSync } = await import("child_process");
+  const out = execSync('powershell -NoProfile -Command "Get-Clipboard -Raw"', { encoding: "utf-8" });
+  console.log("copied", JSON.stringify(out.length > 200 ? out.slice(0, 200) + "…(截断)" : out));
 } else {
   console.error("usage: focus <process|title> | readtext");
   process.exit(1);

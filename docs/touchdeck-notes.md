@@ -36,7 +36,7 @@
   - 旧版只查扇区中点：按钮外缘越出屏幕（2026-08-05 用户实测报告）。
 - 环停止条件：锚点出屏（MIUI 状态栏）时首环可能整环不可见、外环反而伸得回屏内——只有内径超过屏幕对角线才停；排不下宁可加外环，仍有丢弃则日志告警（`menu DROPPED`）。
 - MIUI 展开层真实可视高（物理屏减状态栏）由 BubbleService 挂载后传入 RadialMenuView，不再用 displayMetrics 近似（底部判定才准确）。
-- 默认 12 键（语音/Steer/中断/发送/退格/命令/Plan/全选/换行/文件/复制/粘贴，layouts/left-dock.json）。
+- 默认布局 14 键（语音/Steer/中断/发送/退格/命令/Plan/全选/换行/继续/清空/文件/复制/粘贴，layouts/left-dock.json；「继续」= paste 继续+Enter、「清空」= Ctrl+A+Backspace 两个宏）。
 
 ### 皮肤（C 方案极简发光 HUD，design/menu-scheme2-C-minimal.png）
 
@@ -47,11 +47,14 @@
 
 - **IME 是 text/keys 步骤的环境变量**：目标窗口挂着中文输入法时，`text` 步骤的字母进候选框不直接落字，此时 `Enter` 被 IME 吞去「上屏候选」而不是换行（实测：macro-ok 落字但尾部换行丢失；tgt 触发候选条）。`paste` 步骤完全免疫（剪贴板不经过 IME）。**宏设计原则：中文/关键文本走 paste；text 仅用于确定无 IME 的场景（终端/英文输入态）**。
 - **前台探测用 koffi 直调**（不用 nut-js 异步窗口 API）：GetForegroundWindow → GetWindowTextW（标题）→ GetWindowThreadProcessId → OpenProcess(0x1000) + QueryFullProcessImageNameW（进程名）。500ms 轮询缓存，注入热路径不调 Win32。面板窗口 focusable:false，探测到的永远是目标应用。
-- **UU 远程会话下合成点击不改前台**（2026-08-06 实证）：nut-js 鼠标点击能点画窗口内容，但 GetForegroundWindow 纹丝不动——验证脚本切前台必须 AttachThreadInput 借道 SetForegroundWindow（`prototype/nputil.mjs forcefocus`）。生产环境无此问题：UU 触控注入是驱动级真实输入。
+- **UU 远程会话下合成点击的前台切换取决于落点**（2026-08-06 修订实证）：点击落在目标窗口可见区域时前台正常切换（key-target 靶窗实测）；此前「合成点击不改前台」实为最大化浏览器遮挡导致点击落空。验证脚本切前台的兜底仍是 AttachThreadInput 借道 SetForegroundWindow（`prototype/nputil.mjs forcefocus`）。生产环境无此问题：UU 触控注入是驱动级真实输入。
 - **target 拦截语义**：fg 探测失败（fgCache 为空）时带 target 的按钮一律拦截——宁可拦错不放过，宏落错窗口比不执行更难发现。
 - **队列串行语义**：三源（local/menu/peer）FIFO 单消费者，上限 16 溢出丢最新；步骤抛错中止当前宏继续队列。验证法：本机 press + peerPress 紧接触发两宏，记事本字符序列证明无交错。
-- **场景切换即配置热加载**：resolveConfig 每次触发都读盘，改 touchdeck.config.json 免重启生效（500ms 轮询内）。
-- 验证工具新增 `prototype/nputil.mjs`：focus（点击聚焦）/ forcefocus（AttachThreadInput 强切前台）/ readtext（Ctrl+A+C 读前台文本，注意 Ctrl+C 会盖剪贴板）。
+- **纯修饰键组合按住时长可配**（`behavior.modifierHoldMs`，默认 120ms）：微信输入法 Ctrl+Win+Shift 这类 IME 热键靠「按住窗口」识别，过短可能漏触发。
+- **配置热重载（2026-08-06）**：fs.watch 监听用户配置 + layouts/ + themes/，改动免重启——清图标缓存 → 重建面板 → 重推安卓按钮集 → 控制台 toast 配置错误。两个坑：①根目录监听必须按文件名过滤只认 touchdeck.config.json（state.json 拖球回写会触发重载循环）；②JSON 改坏时 resolveConfig 沿用进程内上一份有效配置（lastGood），注入链路不被坏保存打断，构建脚本（进程内首次解析）无缓存可沿照旧抛错。
+- **ipcMain.on 注册必须一次性**（2026-08-06 实证）：toggle-menu/close-menu 曾挂在 createBubbleWindow 里，面板每次重建（启停/DPI/热重载）叠加一个监听——两个监听把一次 toggle 执行成「开+关」，菜单闪开即收。凡写在窗口创建函数里的 ipcMain.on 都是同款地雷。
+- **nut-js 坐标是逻辑像素**：`screen.width()`=1707（逻辑屏），setPosition 超出被钳到屏边；而 Win32 MoveWindow/GetWindowRect 是物理像素，混用必偏（1.5x 屏差 1.5 倍）。宏端到端验证用按键靶窗 `prototype/key-target.js`（alwaysOnTop 自建 Electron 窗 + CDP 9223 读回事件流），比记事本聚焦战可靠。
+- 验证工具：`prototype/nputil.mjs`（focus 点击聚焦 / forcefocus 强切前台 / readtext Ctrl+A+C 读前台文本并回显前 200 字，注意会盖剪贴板）。
 
 ## P2P 直连（WebRTC）踩坑
 

@@ -134,8 +134,9 @@ async function sendKeys(keys) {
       const key = nutKey[KEY_MAP[keys.key] || keys.key];
       await nutKeyboard.type(key);
     } else {
-      // 纯修饰键组合（如微信输入法 Ctrl+Win+Shift 启动语音输入）：按住片刻即触发
-      await new Promise((r) => setTimeout(r, 60));
+      // 纯修饰键组合（如微信输入法 Ctrl+Win+Shift 启动语音输入）：按住片刻即触发。
+      // 时长可配（behavior.modifierHoldMs）：IME 热键识别要足够长的按住窗口，太短会漏触发。
+      await new Promise((r) => setTimeout(r, resolveConfig().behavior.modifierHoldMs ?? 120));
     }
   } finally {
     for (const m of mods.reverse()) await nutKeyboard.releaseKey(m);
@@ -322,8 +323,8 @@ function registerCommonIpc() {
     };
   });
 
-  // 图标缓存壳：解析逻辑在共享模块（scripts/build-panel-assets.mjs 同用）
-  const iconCache = new Map();
+  // 图标缓存壳：解析逻辑在共享模块（scripts/build-panel-assets.mjs 同用）。
+  // 模块级：配置热重载时要整体清空（主题/图标文件可能已变）。
   ipcMain.handle("get-icon", (_e, name) => {
     if (!iconCache.has(name)) iconCache.set(name, resolveIcon(resolveConfig().themeName, name));
     return iconCache.get(name);
@@ -442,12 +443,21 @@ function registerCommonIpc() {
   // 结束拖拽的唯一信号：渲染端松手（pointerup）或下一次按下兜底。
   // UU 触控注入下 GetAsyncKeyState 读不到按键状态（2026-08-02 实测），不能用它判松手
   ipcMain.on("stop-drag", () => { console.log("[touchdeck] stop-drag received, timer running:", !!dragTimer); endDrag(" (stop-drag)"); });
+
+  // 菜单开关：必须只注册一次（曾挂在 createBubbleWindow 里，面板每次重建都叠加监听，
+  // 两次监听把一次 toggle 执行成「开+关」，菜单闪开即收——2026-08-06 热重载触发实证）
+  ipcMain.on("toggle-menu", () => {
+    if (menuWin && !menuWin.isDestroyed()) closeMenuWindow();
+    else openMenuWindow();
+  });
+  ipcMain.on("close-menu", () => closeMenuWindow());
 }
 
 // ===== 悬浮球面板（2026-08-05 定案：本机唯一面板形态，网格模式已移除）=====
 // 球窗口（小圆球，可拖）+ 全屏透明菜单窗口（展开时创建，收起销毁）。
 let bubbleWin = null;
 let menuWin = null;
+const iconCache = new Map();
 
 function bubbleAnchor() {
   const b = bubbleWin.getBounds();
@@ -489,12 +499,6 @@ function createBubbleWindow() {
       saveState({ x: mx, y: my });
     }, 300);
   });
-
-  ipcMain.on("toggle-menu", () => {
-    if (menuWin && !menuWin.isDestroyed()) closeMenuWindow();
-    else openMenuWindow();
-  });
-  ipcMain.on("close-menu", () => closeMenuWindow());
 
   console.log("[touchdeck] bubble window", JSON.stringify(bubbleWin.getBounds()));
 }
@@ -725,6 +729,43 @@ function registerPeerIpc() {
   ipcMain.on("peer-channel-open", () => broadcastButtons());
 }
 
+// ===== 配置热重载（2026-08-06）=====
+// 监听用户配置 + 布局包 + 主题包：改动后清图标缓存 → 重建面板（球尺寸/缩放/主题可能变）
+// → 重推安卓按钮集 → 控制台提示配置错误。JSON 改坏时 resolveConfig 沿用上一份有效配置，
+// 注入链路不被打断。编辑器保存常连发多个事件（原子替换写入），防抖 400ms 合并成一次。
+function registerConfigWatch() {
+  let timer = null;
+  const onChange = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      console.log("[touchdeck] 配置变更，热重载");
+      const config = resolveConfig();
+      iconCache.clear();
+      closeMenuWindow();
+      if (!panelDisabled()) startPanel();
+      broadcastButtons();
+      if (consoleWin && !consoleWin.isDestroyed()) {
+        consoleWin.webContents.send("config-reloaded", { errors: config.configErrors || [] });
+      }
+    }, 400);
+  };
+  try {
+    // 根目录只认用户配置文件（state.json 等运行时写入过滤掉，防拖球触发重载循环）
+    fs.watch(ROOT, (_e, f) => { if (f === "touchdeck.config.json") onChange(); });
+    fs.watch(path.join(ROOT, "layouts"), onChange);
+    try {
+      fs.watch(path.join(ROOT, "themes"), { recursive: true }, onChange);
+    } catch {
+      // 无 recursive 支持的平台：逐主题子目录挂监听
+      for (const d of fs.readdirSync(path.join(ROOT, "themes"), { withFileTypes: true })) {
+        if (d.isDirectory()) fs.watch(path.join(ROOT, "themes", d.name), onChange);
+      }
+    }
+  } catch (e) {
+    console.error("[touchdeck] 配置监听注册失败:", e.message);
+  }
+}
+
 // ===== 启动 =====
 // 单实例锁：重复启动直接退出，避免桌面快捷方式连点开出两个面板；
 // 二次启动（快捷方式再点）时把控制台窗口拉回前台
@@ -748,6 +789,7 @@ app.whenReady().then(() => {
   createConsoleWindow();
   createTray();
   registerTabShortcut();
+  registerConfigWatch();
   startPanel(); // 控制台打开时自动按配置启动面板（开箱即用）
 
   // 前台窗口轮询：target 校验与场景切换的判定依据（500ms 缓存，不入注入热路径）

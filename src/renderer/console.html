@@ -229,6 +229,14 @@
   window.touchdeck.onScenarioChanged((s) => {
     $("ovScene").textContent = "场景 " + (s.scenario || "默认") + (s.foreground ? " · " + s.foreground : "");
   });
+  // 配置热重载：有错报第一条，无错轻提示；场景行顺带刷新
+  window.touchdeck.onConfigReloaded((s) => {
+    if (s.errors && s.errors.length) toast("配置错误 " + s.errors.length + " 条：" + s.errors[0], 4000);
+    else toast("配置已热重载", 1500);
+    window.touchdeck.getConfig().then((cfg) => {
+      $("ovScene").textContent = "场景 " + (cfg.activeScenario || "默认") + (cfg.foreground ? " · " + cfg.foreground : "");
+    });
+  });
   // 初始场景/前台 + 配置错误提示
   window.touchdeck.getConfig().then((cfg) => {
     $("ovScene").textContent = "场景 " + (cfg.activeScenario || "默认") + (cfg.foreground ? " · " + cfg.foreground : "");

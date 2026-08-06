@@ -111,7 +111,28 @@ function resolveLayout(layoutName) {
   }
 }
 
+// 热重载兜底：运行期配置改坏（JSON 语法错等）时沿用上一份有效配置，
+// 按键注入链路不被一次坏保存打断；构建脚本（进程内首次调用）无缓存可沿，照旧抛错。
+let lastGoodConfig = null;
+
 function resolveConfig() {
+  try {
+    const cfg = resolveConfigFresh();
+    lastGoodConfig = cfg;
+    return cfg;
+  } catch (e) {
+    if (lastGoodConfig) {
+      console.error("[touchdeck] 配置解析失败，沿用上一份有效配置:", e.message);
+      return {
+        ...lastGoodConfig,
+        configErrors: [...(lastGoodConfig.configErrors || []), `热重载解析失败（沿用旧配置）: ${e.message}`],
+      };
+    }
+    throw e;
+  }
+}
+
+function resolveConfigFresh() {
   const user = loadJson(CONFIG_PATH);
   const themeName = user.theme || "default";
   const layoutName = user.layout || "left-dock";
@@ -172,7 +193,7 @@ function resolveConfig() {
   for (const e of errors) console.error("[touchdeck] 配置错误:", e);
 
   return {
-    behavior: { idleDimSeconds: 5, confirmSeconds: 2.5, dragHoldMs: 500, macroStepGapMs: 40, ...(user.behavior || {}) },
+    behavior: { idleDimSeconds: 5, confirmSeconds: 2.5, dragHoldMs: 500, macroStepGapMs: 40, modifierHoldMs: 120, ...(user.behavior || {}) },
     themeName,
     theme: mergedTheme,
     layout: mergedLayout,

@@ -86,6 +86,28 @@
       }
     },
     {
+      "id": "continue",
+      "icon": "play",
+      "label": "继续",
+      "sub": "继续执行",
+      "group": "agent",
+      "macro": [
+        { "paste": "继续" },
+        { "keys": { "key": "enter" } }
+      ]
+    },
+    {
+      "id": "clear-input",
+      "icon": "eraser",
+      "label": "清空",
+      "sub": "清空输入框",
+      "group": "edit",
+      "macro": [
+        { "keys": { "ctrl": true, "key": "a" } },
+        { "keys": { "key": "backspace" } }
+      ]
+    },
+    {
       "id": "slash",
       "icon": "slash",
       "label": "命令",

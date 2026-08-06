@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("touchdeck", {
   // 宏引擎反馈（拦截/失败/成功）与场景切换通知（控制台可见性）
   onActionFeedback: (cb) => ipcRenderer.on("action-feedback", (_e, fb) => cb(fb)),
   onScenarioChanged: (cb) => ipcRenderer.on("scenario-changed", (_e, s) => cb(s)),
+  // 配置热重载结果（控制台提示配置错误/重载成功）
+  onConfigReloaded: (cb) => ipcRenderer.on("config-reloaded", (_e, s) => cb(s)),
   // host→client 按钮集推送：主进程转发给 peer.html，经 DataChannel 广播
   onPeerBroadcast: (cb) => ipcRenderer.on("peer-broadcast", (_e, payload) => cb(payload)),
   peerChannelOpen: () => ipcRenderer.send("peer-channel-open"),
