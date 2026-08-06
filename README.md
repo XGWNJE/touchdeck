@@ -30,7 +30,7 @@ Windows 触控快捷工具栏：跑在被远程控制的 Windows 本机上，为
 
 ## 运行
 
-**一键启动（推荐）**：双击桌面 `TouchDeck` 快捷方式（或 `npm start`）——自动打开控制台窗口并启动面板。控制台可启停本机面板、开启 P2P 直连（显示房间码）。快捷方式生成脚本：`powershell -File scripts/make-shortcuts.ps1`。
+**一键启动（推荐）**：双击桌面 `TouchDeck` 快捷方式（或 `npm run build && npm start`）——自动打开控制台窗口并启动面板。控制台可启停本机面板、开启 P2P 直连（显示房间码）。快捷方式生成脚本：`powershell -File scripts/make-shortcuts.ps1`。
 
 本机面板为悬浮球模式（2026-08-05 定案，仅键鼠交互）：点按球展开/收起径向菜单、按住 Tab 展开菜单松开确认悬停项、长按球拖动挪位；触控滑选交互由安卓悬浮球 App 承担。
 
@@ -42,4 +42,4 @@ Windows 触控快捷工具栏：跑在被远程控制的 Windows 本机上，为
 - **平板浏览器**：打开 `src/renderer/peer.html` 可直接作为客户端加入房间（开发/测试用）。
 - **多设备**：同一房间码支持多台设备同时连接、同时按键（服务端 1 host + 8 clients，clientId 路由）。
 
-技术栈：Electron + 原生 JS（原型期）；按键注入 @nut-tree/nut-js；窗口移动 koffi 直调 Win32。Agent 侧约束见 AGENTS.md。
+技术栈：Electron + TypeScript + React + Tailwind（2026-08-06 起正式版，electron-vite 构建；此前为原生 JS 原型期）；按键注入 @nut-tree/nut-js；窗口移动 koffi 直调 Win32。Agent 侧约束见 AGENTS.md。

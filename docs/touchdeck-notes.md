@@ -53,7 +53,7 @@
 - **纯修饰键组合按住时长可配**（`behavior.modifierHoldMs`，默认 120ms）：微信输入法 Ctrl+Win+Shift 这类 IME 热键靠「按住窗口」识别，过短可能漏触发。
 - **配置热重载（2026-08-06）**：fs.watch 监听用户配置 + layouts/ + themes/，改动免重启——清图标缓存 → 重建面板 → 重推安卓按钮集 → 控制台 toast 配置错误。两个坑：①根目录监听必须按文件名过滤只认 touchdeck.config.json（state.json 拖球回写会触发重载循环）；②JSON 改坏时 resolveConfig 沿用进程内上一份有效配置（lastGood），注入链路不被坏保存打断，构建脚本（进程内首次解析）无缓存可沿照旧抛错。
 - **ipcMain.on 注册必须一次性**（2026-08-06 实证）：toggle-menu/close-menu 曾挂在 createBubbleWindow 里，面板每次重建（启停/DPI/热重载）叠加一个监听——两个监听把一次 toggle 执行成「开+关」，菜单闪开即收。凡写在窗口创建函数里的 ipcMain.on 都是同款地雷。
-- **nut-js 坐标是逻辑像素**：`screen.width()`=1707（逻辑屏），setPosition 超出被钳到屏边；而 Win32 MoveWindow/GetWindowRect 是物理像素，混用必偏（1.5x 屏差 1.5 倍）。宏端到端验证用按键靶窗 `prototype/key-target.js`（alwaysOnTop 自建 Electron 窗 + CDP 9223 读回事件流），比记事本聚焦战可靠。
+- **nut-js 坐标是逻辑像素**：`screen.width()`=1707（逻辑屏），setPosition 超出被钳到屏边；而 Win32 MoveWindow/GetWindowRect 是物理像素，混用必偏（1.5x 屏差 1.5 倍）。宏端到端验证用按键靶窗 `prototype/key-target.cjs`（alwaysOnTop 自建 Electron 窗 + CDP 9223 读回事件流），比记事本聚焦战可靠；注意靶窗事件监听挂 document 而非 textarea——点击非聚焦区（log 面板）会把焦点挪到 body，挂 textarea 会漏记。
 - 验证工具：`prototype/nputil.mjs`（focus 点击聚焦 / forcefocus 强切前台 / readtext Ctrl+A+C 读前台文本并回显前 200 字，注意会盖剪贴板）。
 
 ## P2P 直连（WebRTC）踩坑
@@ -77,6 +77,16 @@
 - **房间 reclaim**：host 持久化房号，重连 `create-room` 带原房号；服务端 host 掉线进 90s 宽限期（不删房，client 收 `host-gone` 保持 WebRTC），host 回来自动复房（client 收 `host-back`）；宽限期满才删房。信令整体重启后 host 也能用房号重建，WebRTC 连接本身不断——实测 VPS 重启信令后双端按键无感。
 - **`room-not-found` 是瞬态**（信令重启/host 未 reclaim 窗口期）：按重连重试（退避上限内自愈）；room-full/room-expired 才是终态。
 - **房间 TTL 30 分钟**：服务端 60s 定时清扫，到期主动通知 host（`room-expired`，控制台进终态提示重新开启）与 client（`peer-left`），不再有僵尸房号。
+- **peer 窗口启动竞态**（2026-08-06 实证）：`peer-start` IPC 在页面加载完成前 send 会丢消息，卡「连接信令中」——主进程须 `isLoading()` 判断，挂 `did-finish-load` 再发。模块脚本（vite 构建）比内联脚本慢一拍，迁 TS 后才暴露。
+
+## 正式版迁移（2026-08-06，TS + React + Tailwind）
+
+- **electron-vite 5 四页多入口**（console/bubble/menu/peer）；`"type": "module"` 后主进程 ESM 输出，项目内残留 CJS 脚本须改 `.cjs`（key-target 实证）。
+- **preload 必须保持 CJS 输出**（渲染进程默认 sandbox，ESM preload 不兼容）：electron.vite.config.ts 里 preload 强制 `format:"cjs"` + `.cjs` 后缀，窗口引用 `out/preload/index.cjs`。
+- **路径基准**：`out/main/index.js` 上溯两级 = 包根（dev=项目根，打包=asar 根）；渲染页 dev 走 `ELECTRON_RENDERER_URL`，产物/打包走 `out/renderer/<页>/index.html`。
+- **electron-builder files 必须显式带运行时数据**：`out/` + touchdeck.config.json + layouts/ + themes/ + icons/ + src/assets/——只列代码目录会把配置文件落在 asar 外，打包版启动即死（迁移时修复的存量隐患）。
+- **React 壳包 canvas 的范式**：CSS 原样留页头（选择器契约不变），逻辑进 `main.tsx`，高频 pointer 事件走 ref + body.classList 直操，不走 React state（零重渲染，行为逐行等价）。
+- **@vitejs/plugin-react 须 ^5**：^6 要 vite 8，与 electron-vite 5 的 vite ^7 冲突。
 - **真机 Clash VPN 下 ICE 周期性 DISCONNECTED→FAILED→自愈**（约每分钟一次）：属预期现象，连接保持 open 不干预即可，勿因此拆连接。
 - host 侧设备计数按「通道实际 open」的设备数；channel.onclose 必须清理 peers Map（否则计数永久虚高）。
 
