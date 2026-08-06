@@ -1,21 +1,21 @@
 {
-    "name": "touchdeck",
-    "version": "0.1.6",
-    "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
-    "main": "src/main.js",
-    "scripts": {
-        "start": "electron .",
-        "dist:win": "electron-builder --win --publish never"
-    },
-    "author": "XGWNJE",
-    "license": "MIT",
-    "dependencies": {
-        "@nut-tree/nut-js": "^3.1.2",
-        "koffi": "^3.1.4",
-        "lucide-static": "^1.28.0"
-    },
-    "devDependencies": {
-        "electron": "^43.2.0",
-        "electron-builder": "^26.15.3"
-    }
+  "name": "touchdeck",
+  "version": "0.1.7",
+  "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "author": "XGWNJE",
+  "license": "MIT",
+  "dependencies": {
+    "@nut-tree/nut-js": "^3.1.2",
+    "koffi": "^3.1.4",
+    "lucide-static": "^1.28.0"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  }
 }
