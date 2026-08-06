@@ -41,7 +41,7 @@ class RadialMenuView(
     private val onSelect: (id: String, label: String) -> Unit
 ) : View(context) {
 
-    data class Item(val id: String, val label: String, val icon: Bitmap?, val colorBg: Int, val colorAccent: Int)
+    data class Item(val id: String, val label: String, val icon: Bitmap?, val colorBg: Int, val colorAccent: Int, val aux: Boolean = false)
 
     /** 一个落位的扇区：环半径区间 + 角度区间 + 占据它的按键 */
     private class Slot(val inner: Float, val outer: Float, val a0: Float, val a1: Float, val item: Item)
@@ -150,6 +150,9 @@ class RadialMenuView(
     // 扇区黑透底提供可识别度（局部磨砂近似——悬浮窗无截屏权限做不到真毛玻璃，
     // 用户明确不要全局压暗背景，2026-08-03）
     private val cyan = 0xFF22D3EE.toInt()
+    // aux 常驻键标签色：淡青，对齐 Windows 端 menu.html；普通按钮保持原浅色
+    private val auxLabelColor = 0xFF67E8F9.toInt()
+    private val labelColor = 0xffeeeeee.toInt()
     private val wedgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
@@ -163,7 +166,7 @@ class RadialMenuView(
         color = cyan
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xffeeeeee.toInt()
+        color = labelColor
         textAlign = Paint.Align.CENTER
     }
     private val path = Path()
@@ -215,6 +218,8 @@ class RadialMenuView(
                 val y = cy + dirY * rIcon - size / 2
                 canvas.drawBitmap(bmp, null, RectF(x, y, x + size, y + size), null)
             }
+            // aux 常驻键标签淡青（对齐 Windows 端 menu.html），普通按钮保持原色
+            textPaint.color = if (it.aux) auxLabelColor else labelColor
             canvas.drawText(it.label, cx + dirX * rLabel, cy + dirY * rLabel + dp(4f), textPaint)
         }
     }

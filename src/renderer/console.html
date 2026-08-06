@@ -69,6 +69,7 @@
 <div id="overview">
   <div class="ov-item"><div class="dot" id="ovP2P"></div><span id="ovP2PT">P2P 直连…</span></div>
   <div class="ov-item"><div class="dot" id="ovPanel"></div><span id="ovPanelT">面板…</span></div>
+  <div class="ov-item"><span id="ovScene" style="color:#888">场景 默认</span></div>
 </div>
 
 <div class="card">
@@ -100,12 +101,12 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let toastTimer = null;
-  function toast(text) {
+  function toast(text, ms) {
     const t = $("toast");
     t.textContent = text;
     t.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("show"), 1500);
+    toastTimer = setTimeout(() => t.classList.remove("show"), ms || 1500);
   }
   async function copyText(text, hintEl) {
     try {
@@ -219,6 +220,22 @@
   window.touchdeck.onPeerStatus((ps) => renderP2P(ps));
   window.touchdeck.onPanelStatus((s) => renderPanel(s));
   window.touchdeck.onPeerPressFailed((id) => toast("远程按键注入失败：" + id));
+  // 宏引擎反馈：拦截与失败必须可见（成功不打扰）；配置错误启动即提示
+  window.touchdeck.onActionFeedback((fb) => {
+    if (fb.ok) return;
+    const src = { local: "本机", menu: "菜单", peer: "远程" }[fb.source] || fb.source;
+    toast(`${src}动作「${fb.id}」${fb.blocked ? "已拦截" : "失败"}：${fb.reason}`, 2600);
+  });
+  window.touchdeck.onScenarioChanged((s) => {
+    $("ovScene").textContent = "场景 " + (s.scenario || "默认") + (s.foreground ? " · " + s.foreground : "");
+  });
+  // 初始场景/前台 + 配置错误提示
+  window.touchdeck.getConfig().then((cfg) => {
+    $("ovScene").textContent = "场景 " + (cfg.activeScenario || "默认") + (cfg.foreground ? " · " + cfg.foreground : "");
+    if (cfg.configErrors && cfg.configErrors.length) {
+      toast("配置错误 " + cfg.configErrors.length + " 条：" + cfg.configErrors[0], 4000);
+    }
+  });
 
   refresh();
   // 隐藏进托盘后暂停轮询，回前台立即补一次

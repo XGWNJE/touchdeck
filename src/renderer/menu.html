@@ -208,7 +208,7 @@ function draw() {
       const size = 24;
       ctx.drawImage(img, dirX * rIcon - size / 2, dirY * rIcon - size / 2, size, size);
     }
-    ctx.fillStyle = "#eeeeee";
+    ctx.fillStyle = s.item.aux ? "#67e8f9" : "#eeeeee";  // aux 常驻键：淡青标签与普通键区分
     ctx.font = "11px 'Microsoft YaHei', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -283,11 +283,16 @@ async function loadIcon(name) {
   draw();
 }
 
-window.touchdeck.onMenuInit(async (init) => {
+// 菜单内容 = 主进程下发的有效按钮集（aux 常驻键占内环起始槽位 + 场景按钮）。
+// 场景切换时主进程发 menu-reload，整组重排。
+let lastInit = null;
+async function buildMenu(init) {
   const { anchor, ballSize: bs, screen } = init;
   if (bs) ballSize = bs;
   const config = await window.touchdeck.getConfig();
-  state = layoutMenu(anchor, screen, config.buttons, config.layout);
+  const buttons = config.effectiveButtons || config.buttons;
+  const layout = config.effectiveLayout || config.layout;
+  state = layoutMenu(anchor, screen, buttons, layout);
   ballRadius = ballSize / 2 + 6;
   setSize(screen.width, screen.height);
   stage.style.setProperty("--px", anchor.x + "px");
@@ -296,6 +301,16 @@ window.touchdeck.onMenuInit(async (init) => {
 
   for (const s of state.slots) loadIcon(s.item.icon);
   draw();
+}
+
+window.touchdeck.onMenuInit((init) => {
+  lastInit = init;
+  buildMenu(init);
+});
+
+// 场景切换：按新按钮集重排（锚点/屏幕不变）
+window.touchdeck.onMenuReload(() => {
+  if (lastInit) buildMenu(lastInit);
 });
 </script>
 </body>

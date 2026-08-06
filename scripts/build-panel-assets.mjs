@@ -1,9 +1,12 @@
 // 生成 Android 原生面板资源：panel.json（布局+主题+按钮）+ 主题 PNG 图标副本。
-// 产物进 android assets，App 离线用原生 View 渲染；通讯接通后同一格式可由服务器下发。
+// 产物进 android assets，App 离线用原生 View 渲染（未连接兜底）；连接后按钮集由 host 经 DataChannel 下发。
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { resolveConfig, resolveIcon } from "../server.mjs";
+// 共享配置解析（CJS 模块，default import 后解构；2026-08-05 修复：旧指向已删除的 server.mjs）
+import configResolve from "../src/config-resolve.js";
+
+const { resolveConfig, resolveIcon } = configResolve;
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const config = resolveConfig();
@@ -36,10 +39,12 @@ const panel = {
       subSize: scaled(config.theme.button.subSize),
     },
   },
-  buttons: config.buttons.map((b) => ({
-    id: b.id, icon: b.icon, label: b.label, sub: b.sub,
-    group: b.group || "edit", confirm: !!b.confirm,
-  })),
+  // aux 常驻键在前（占内环起始槽位），与布局按钮同 id 去重（aux 优先）——与 Windows 端同规则
+  buttons: [...config.auxButtons, ...config.buttons.filter((lb) => !config.auxButtons.some((a) => a.id === lb.id))]
+    .map((b) => ({
+      id: b.id, icon: b.icon, label: b.label, sub: b.sub,
+      group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux,
+    })),
 };
 
 let copied = 0;

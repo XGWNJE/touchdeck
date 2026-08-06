@@ -4,8 +4,44 @@
   "behavior": {
     "idleDimSeconds": 5,
     "confirmSeconds": 2.5,
-    "dragHoldMs": 500
+    "dragHoldMs": 500,
+    "macroStepGapMs": 40
   },
+  "auxButtons": [
+    {
+      "id": "voice",
+      "icon": "mic",
+      "label": "语音",
+      "sub": "启动语音",
+      "group": "voice",
+      "keys": {
+        "ctrl": true,
+        "win": true,
+        "shift": true
+      }
+    },
+    {
+      "id": "esc",
+      "icon": "hand",
+      "label": "中断",
+      "sub": "Esc",
+      "group": "danger",
+      "confirm": true,
+      "keys": {
+        "key": "escape"
+      }
+    },
+    {
+      "id": "enter",
+      "icon": "send",
+      "label": "发送",
+      "sub": "Enter",
+      "group": "agent",
+      "keys": {
+        "key": "enter"
+      }
+    }
+  ],
   "themeOverrides": {},
   "layoutOverrides": {}
 }

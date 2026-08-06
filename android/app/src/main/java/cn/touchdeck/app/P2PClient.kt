@@ -11,6 +11,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.DataChannel.Init as DcInit
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.nio.ByteBuffer
@@ -18,6 +19,20 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+
+/**
+ * host 下发的动态按钮（DataChannel "buttons" 消息，连接建立与场景切换时推送）。
+ * 字段全部可空兜底，缺字段按空串/false 处理，不崩。
+ */
+data class PanelButton(
+    val id: String,
+    val icon: String,
+    val label: String,
+    val sub: String,
+    val group: String,
+    val confirm: Boolean,
+    val aux: Boolean
+)
 
 /**
  * P2P 全局状态：MainActivity 控制连接，BubbleService 按键时读取。
@@ -33,6 +48,10 @@ object P2PState {
     @Volatile
     var roomCode: String = ""
     var listener: ((String) -> Unit)? = null
+
+    // host 下发的动态按钮集（数组顺序即排布顺序，aux 常驻键在前）；null = 用离线 panel.json
+    @Volatile
+    var dynamicButtons: List<PanelButton>? = null
 
     fun start(signalUrl: String, code: String, onOpen: () -> Unit) {
         stop()
@@ -54,6 +73,7 @@ object P2PState {
         client?.teardown()
         client = null
         status = "idle"
+        dynamicButtons = null // 断开即清空动态按钮集，菜单回落离线 panel.json
         listener?.invoke("idle")
     }
 
@@ -394,6 +414,12 @@ class P2PClient(
                     buffer.data.get(bytes)
                     val msg = JSONObject(String(bytes, StandardCharsets.UTF_8))
                     if (msg.has("pong")) lastPong = System.currentTimeMillis()
+                    // host 按钮集下发（type=="buttons"，与心跳 pong / 上行按键 {id} 区分）：
+                    // 通道建立与场景切换时推送，存 P2PState 供 BubbleService 构建菜单
+                    if (msg.optString("type") == "buttons") {
+                        P2PState.dynamicButtons = parsePanelButtons(msg.optJSONArray("buttons"))
+                        Log.d(TAG, "buttons received: ${P2PState.dynamicButtons?.size ?: 0}")
+                    }
                 } catch (_: Exception) {}
             }
         })
@@ -451,6 +477,27 @@ class P2PClient(
                     )
                 }
             }
+        }
+        return list
+    }
+
+    /** 解析 host 下发的 buttons 数组：元素字段 id/icon/label/sub/group/confirm/aux，全部可空兜底 */
+    private fun parsePanelButtons(arr: JSONArray?): List<PanelButton>? {
+        arr ?: return null
+        val list = ArrayList<PanelButton>(arr.length())
+        for (i in 0 until arr.length()) {
+            val b = arr.optJSONObject(i) ?: continue
+            list.add(
+                PanelButton(
+                    id = b.optString("id"),
+                    icon = b.optString("icon"),
+                    label = b.optString("label"),
+                    sub = b.optString("sub"),
+                    group = b.optString("group"),
+                    confirm = b.optBoolean("confirm"),
+                    aux = b.optBoolean("aux")
+                )
+            )
         }
         return list
     }

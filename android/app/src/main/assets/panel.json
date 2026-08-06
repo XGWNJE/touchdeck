@@ -72,15 +72,8 @@
       "label": "语音",
       "sub": "启动语音",
       "group": "voice",
-      "confirm": false
-    },
-    {
-      "id": "steer",
-      "icon": "zap",
-      "label": "Steer",
-      "sub": "插队提示词",
-      "group": "agent",
-      "confirm": false
+      "confirm": false,
+      "aux": true
     },
     {
       "id": "esc",
@@ -88,7 +81,8 @@
       "label": "中断",
       "sub": "Esc",
       "group": "danger",
-      "confirm": true
+      "confirm": true,
+      "aux": true
     },
     {
       "id": "enter",
@@ -96,7 +90,17 @@
       "label": "发送",
       "sub": "Enter",
       "group": "agent",
-      "confirm": false
+      "confirm": false,
+      "aux": true
+    },
+    {
+      "id": "steer",
+      "icon": "zap",
+      "label": "Steer",
+      "sub": "插队提示词",
+      "group": "agent",
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "backspace",
@@ -104,7 +108,8 @@
       "label": "退格",
       "sub": "Backspace",
       "group": "edit",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "slash",
@@ -112,7 +117,8 @@
       "label": "命令",
       "sub": "斜杠",
       "group": "cmd",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "plan",
@@ -120,7 +126,8 @@
       "label": "Plan",
       "sub": "Shift+Tab",
       "group": "agent",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "selectall",
@@ -128,7 +135,8 @@
       "label": "全选",
       "sub": "Ctrl+A",
       "group": "agent",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "newline",
@@ -136,7 +144,8 @@
       "label": "换行",
       "sub": "Shift+Enter",
       "group": "edit",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "at",
@@ -144,7 +153,8 @@
       "label": "文件",
       "sub": "引用",
       "group": "cmd",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "copy",
@@ -152,7 +162,8 @@
       "label": "复制",
       "sub": "Ctrl+C",
       "group": "edit",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     },
     {
       "id": "paste",
@@ -160,7 +171,8 @@
       "label": "粘贴",
       "sub": "Ctrl+V",
       "group": "edit",
-      "confirm": false
+      "confirm": false,
+      "aux": false
     }
   ]
 }

@@ -14,6 +14,8 @@
 ## Windows 悬浮球（bubble.html + menu.html）
 
 - **仅键鼠交互**（2026-08-05 定案，触控滑选手势已移除）：快速点球=展开/收起常驻菜单；按住 Tab（globalShortcut）展开菜单、悬停扇区高亮、左击或松 Tab（主进程轮询 GetAsyncKeyState(0x09) 发 `menu-confirm`）确认、再按 Tab 收起；长按球 350ms=拖球挪位。
+- **长按拖动反馈**（2026-08-06）：按下即起 conic 进度环（rAF 驱动 `--p` 与 350ms 计时同源走满），到点进 armed 态（球放大 1.12 + 青色光晕 + 环常亮）——用户明确知道「现在可以拖了」；松手/取消即复位。**覆盖层必须 `pointer-events: none`**：进度环 div 盖在球上，漏了这条会把球的 pointerdown 全截走、鼠标完全失控（2026-08-06 实证）；教训——CDP `dispatchEvent` 直达目标元素、绕过命中测试，验证不了这类拦截，涉及命中的改动必须用真实输入（nut 点击）复验。
+- **拖球边界与吸附**（2026-08-06）：拖动全程 `clampToWorkArea` 夹取（整球不出工作区，与边缘保持 EDGE_MARGIN=12 逻辑像素极限距离）；松手按阈值吸附——距某边 ≤64px（SNAP_THRESHOLD）才吸该边，四边独立判定、邻边同入阈即吸四角，否则停原位；~140ms 缓动滑边后持久化吸附后坐标；启动恢复位置同样过一遍夹取。验证注意：主进程 key-up 收尾依赖 GetAsyncKeyState(0x01)，**CDP 合成 pointerdown 与 nut pressButton 的按键状态它都读不到**（会立即 key-up 收尾）——合成环境测拖动中途态不可行，用「瞬时收尾=吸附立即触发」变相验证吸附/边距/持久化即可。
 - **Tab 按住必须 `tabHoldActive` 守卫**（2026-08-05 实证）：按住 Tab 时 Windows 键盘自动重复会反复触发 globalShortcut 回调（RegisterHotKey 机理），无守卫时重复触发走到「再按 Tab 收起」分支，菜单在按住期间被误关掉。守卫区分「按住期间的重复触发」（忽略）与「松开后的再次按下」（收起）。
 - 菜单窗口为展开时创建、收起销毁的全屏透明层；菜单窗口内按 `ballSize` 同尺寸绘制球芯（内环间隙动态 ≥ 球半径+6，球不被扇区压）；hover 高亮由 `pressedIndex` 统一驱动。
 - **拖球收尾双兜底**（2026-08-05 本机模拟实证：SetWindowPos 移动窗口会中断 pointer capture 导致松手信号丢失）：主进程轮询 GetAsyncKeyState(0x01) 左键抬起（`drag end (key-up)`，本地鼠标可靠；UU 触控注入读不到按键状态）+ 静止 400ms idle；渲染端 pointerup 仍是最快路径。
@@ -40,6 +42,16 @@
 
 - 扇区不填色、发丝白环+径向分割线、白图标小标签、选中扇区青色（0xFF22D3EE）发光外弧（递宽递淡三描边近似，硬件加速下 BlurMaskFilter 不可靠）+ 淡青填充。
 - 不要全局压暗遮罩（用户明确：只有菜单影响画面）；可识别度靠扇区黑透底 0xA6000000（局部磨砂近似，悬浮窗无截屏权限做不到真毛玻璃）。
+
+## 宏引擎与目标绑定（2026-08-06 实证）
+
+- **IME 是 text/keys 步骤的环境变量**：目标窗口挂着中文输入法时，`text` 步骤的字母进候选框不直接落字，此时 `Enter` 被 IME 吞去「上屏候选」而不是换行（实测：macro-ok 落字但尾部换行丢失；tgt 触发候选条）。`paste` 步骤完全免疫（剪贴板不经过 IME）。**宏设计原则：中文/关键文本走 paste；text 仅用于确定无 IME 的场景（终端/英文输入态）**。
+- **前台探测用 koffi 直调**（不用 nut-js 异步窗口 API）：GetForegroundWindow → GetWindowTextW（标题）→ GetWindowThreadProcessId → OpenProcess(0x1000) + QueryFullProcessImageNameW（进程名）。500ms 轮询缓存，注入热路径不调 Win32。面板窗口 focusable:false，探测到的永远是目标应用。
+- **UU 远程会话下合成点击不改前台**（2026-08-06 实证）：nut-js 鼠标点击能点画窗口内容，但 GetForegroundWindow 纹丝不动——验证脚本切前台必须 AttachThreadInput 借道 SetForegroundWindow（`prototype/nputil.mjs forcefocus`）。生产环境无此问题：UU 触控注入是驱动级真实输入。
+- **target 拦截语义**：fg 探测失败（fgCache 为空）时带 target 的按钮一律拦截——宁可拦错不放过，宏落错窗口比不执行更难发现。
+- **队列串行语义**：三源（local/menu/peer）FIFO 单消费者，上限 16 溢出丢最新；步骤抛错中止当前宏继续队列。验证法：本机 press + peerPress 紧接触发两宏，记事本字符序列证明无交错。
+- **场景切换即配置热加载**：resolveConfig 每次触发都读盘，改 touchdeck.config.json 免重启生效（500ms 轮询内）。
+- 验证工具新增 `prototype/nputil.mjs`：focus（点击聚焦）/ forcefocus（AttachThreadInput 强切前台）/ readtext（Ctrl+A+C 读前台文本，注意 Ctrl+C 会盖剪贴板）。
 
 ## P2P 直连（WebRTC）踩坑
 
@@ -70,6 +82,16 @@
 - UU 触控注入下 pointermove 与 GetAsyncKeyState 均不可靠：不得用移动阈值判拖拽、不得用 GetAsyncKeyState 判松手。
 - 拖拽双通道：小揪揪手柄（布局包 `handle`，原生拖拽区，面板贴顶/底边时自动翻面）与按钮长按抓起（`behavior.dragHoldMs` 默认 500ms，松手信号只信渲染端 pointerup）。
 - 页面缩放已锁死（setVisualZoomLevelLimits(1,1)），UU 多点触控注入不得引发捏合缩放。
+
+## 端到端验证工具链（2026-08-05 定型，通用方法）
+
+- **CDP 驱动器**（`prototype/cdp-drive.mjs`，已入库）：`npx electron . --remote-debugging-port=9222` 启动后，`node prototype/cdp-drive.mjs <url子串> <JS>` 可在任意渲染窗口（console.html/peer.html/menu.html）内执行 JS——读状态文本、点按钮、触发断线，是控制台状态反馈与 P2P 链路自动化验证的主通道。返回值为 `Runtime.evaluate` 的 returnByValue 结果。
+- **透明窗口截图目检**：渲染端调 `window.touchdeck.debugShot()`（desktopCapturer 实现）写 `prototype/screen-dbg.png`；普通 GDI/PrintScreen 抓不到透明分层窗口，勿用。
+- **按键注入验收**：记事本置前 → 点按钮 → 前台窗口仍是记事本且字符落入（AGENTS.md 最小验证矩阵）；自动化版是把记事本句柄置前后用 CDP 触发按钮再读记事本内容/前台窗口标题。
+- **安卓 UI 自动化坐标法**：`input tap` 按分辨率换算坐标（真机 1200x2670：高级设置 600,705、连接钮 982,919；模拟器 1080x2400：540,598、912,775）；**展开「高级设置」偶发点不中，须先 `uiautomator dump` 确认界面已是「▲ 高级设置」再点连接钮**，否则点到空处。
+- **MIUI 触摸盲区**：球贴状态栏时上半部触摸被系统吞，点 (88,140) 之类偏下位置才生效。
+- **真机 P2P 日志**：`adb logcat -s TouchDeckP2P TouchDeck`；ICE 周期性 DISCONNECTED→FAILED→自愈（Clash VPN 下约每分钟一次）属预期，勿当 bug 拆连接（判定规则见「断线健壮性」节）。动态按钮集下发成功的标记是 `buttons received: N`（N = aux + 场景按钮总数）。
+- **信令服务运维**：VPS 部署路径 `/opt/touchdeck-signal/`，systemd 单元 `touchdeck-signal`（8790 端口，nginx 反代 wss://api.xgwnje.cn/signal）；改 signal.mjs 后 `systemctl restart touchdeck-signal`，host 重连带原房号可秒级 reclaim，双端 WebRTC 无感。
 
 ## 诊断知识点备查
 

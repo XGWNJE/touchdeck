@@ -13,33 +13,70 @@
     transition: opacity .15s, transform .1s;
   }
   body.pressed #ball { opacity: .85; transform: scale(.94); }
+  /* 长按进度环：conic 填充随 --p（0..1）走满 350ms；armed 后整环常亮。
+     环收在窗口内（inset 3px、2px 细环）：外扩发光会被球尺寸窗口裁切，不做外发光 */
+  #ring {
+    position: absolute; inset: 3px; border-radius: 50%; opacity: 0;
+    pointer-events: none; /* 环纯视觉：盖在球上但不能截走球的 pointerdown（2026-08-06 实证） */
+    background: conic-gradient(rgba(34,211,238,.55) calc(var(--p, 0) * 1turn), rgba(255,255,255,.08) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+    transition: opacity .12s;
+  }
+  body.holding #ring { opacity: 1; }
+  body.armed #ring { opacity: 1; background: rgba(34,211,238,.9); }
+  /* 拖球待命：轻微提亮 + 内描边（克制，不外扩——窗口只有球大，外发光必被裁） */
+  body.armed #ball {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1.5px rgba(34,211,238,.85), 0 2px 8px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.15);
+  }
 </style>
 </head>
 <body>
 <div id="ball"></div>
+<div id="ring"></div>
 <script>
 // 悬浮球（Windows 版，2026-08-05 定案：本机只保留键鼠交互，触控滑选归安卓端）。
 // 手势：快速点按=展开/收起常驻菜单（悬停与确认在菜单端：hover 待选中，
 // 左击或松 Tab 确认）；长按 350ms=拖球挪位。无滑选手势。
+// 长按反馈（2026-08-06）：按下即起进度环（rAF 驱动 --p 与 HOLD_MS 同步走满），
+// 350ms 到点进 armed——球放大 + 青色光晕 + 环常亮，松手/取消即复位。
 const HOLD_MS = 350;      // 长按进拖球
 const ball = document.getElementById("ball");
+const ring = document.getElementById("ring");
 const body = document.body;
 
 let pressed = false;       // 悬停 pointermove 也会触发（Chromium 兼容事件），必须按下后才响应
 let holdTimer = null;
+let holdRaf = null;
 let dragging = false;
 
-function clearHold() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } }
+function clearHold() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if (holdRaf) { cancelAnimationFrame(holdRaf); holdRaf = null; }
+  ring.style.setProperty("--p", 0);
+  body.classList.remove("holding");
+}
 
 ball.addEventListener("pointerdown", (e) => {
   pressed = true;
   dragging = false;
   body.classList.add("pressed");
   clearHold();
+  body.classList.add("holding");
+  const t0 = performance.now();
+  const tick = (t) => {
+    // 进度环与长按计时同源同步：视觉上走满 ≈ 拖球待命
+    ring.style.setProperty("--p", Math.min(1, (t - t0) / HOLD_MS));
+    holdRaf = requestAnimationFrame(tick);
+  };
+  holdRaf = requestAnimationFrame(tick);
   holdTimer = setTimeout(() => {
     holdTimer = null;
+    if (holdRaf) { cancelAnimationFrame(holdRaf); holdRaf = null; }
     dragging = true;
-    body.classList.remove("pressed");
+    body.classList.remove("pressed", "holding");
+    body.classList.add("armed");
     window.touchdeck.startDrag();       // 主进程 SetWindowPos 轮询拖动
   }, HOLD_MS);
   e.preventDefault();
@@ -47,7 +84,7 @@ ball.addEventListener("pointerdown", (e) => {
 
 ball.addEventListener("pointerup", (e) => {
   if (!pressed) return;                 // 杂散 up（合成 mouseup 等）不得触发收起/展开
-  body.classList.remove("pressed");
+  body.classList.remove("pressed", "armed");
   pressed = false;
   clearHold();
   if (dragging) {
@@ -59,7 +96,16 @@ ball.addEventListener("pointerup", (e) => {
 });
 
 ball.addEventListener("pointercancel", () => {
-  body.classList.remove("pressed");
+  body.classList.remove("pressed", "armed");
+  pressed = false;
+  clearHold();
+  dragging = false;
+});
+
+// 主进程拖拽收尾兜底通知：SetWindowPos 会打断渲染端 pointer capture（pointerup 丢失），
+// 真实拖动松手后由它来复位 armed 视觉（2026-08-06 实证：否则拖拽态一直挂着）
+window.touchdeck.onDragEnded(() => {
+  body.classList.remove("pressed", "armed", "holding");
   pressed = false;
   clearHold();
   dragging = false;

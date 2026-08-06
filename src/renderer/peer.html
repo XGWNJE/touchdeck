@@ -163,6 +163,8 @@ function bindChannel(clientId, p) {
   p.channel.onopen = () => {
     p.lastPing = Date.now();
     postPeers();
+    // 通道就绪：请主进程把当前有效按钮集推下来（安卓动态渲染；离线 panel.json 仅兜底）
+    window.touchdeck.peerChannelOpen();
   };
   p.channel.onclose = () => {
     // 设备断开必须清理 + 刷新计数（旧版只改文案不删 Map，计数永久虚高）
@@ -243,6 +245,17 @@ window.touchdeck.onPeerStop(() => {
   roomCode = null;
   localStorage.removeItem(ROOM_KEY);
   postStatus({ phase: "idle", code: null, peers: 0 });
+});
+
+// 主进程广播（按钮集/场景更新）：转发给所有 open 通道；未 open 的设备上线时
+// 由 peerChannelOpen 触发补推，不在这里缓存
+window.touchdeck.onPeerBroadcast((payload) => {
+  const data = JSON.stringify(payload);
+  for (const p of peers.values()) {
+    if (p.channel && p.channel.readyState === "open") {
+      try { p.channel.send(data); } catch { /* 单设备失败不阻塞其他设备 */ }
+    }
+  }
 });
 </script>
 </body>

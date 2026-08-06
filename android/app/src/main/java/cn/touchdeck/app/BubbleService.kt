@@ -343,16 +343,28 @@ class BubbleService : Service() {
         val theme = cfg.getJSONObject("theme")
         val btn = theme.getJSONObject("button")
         val groups = theme.optJSONObject("groups")
-        val buttons = cfg.getJSONArray("buttons")
 
-        // 菜单项：同一套 panel.json 数据（分组配色 + 主题图标）
+        // 菜单项：有 host 下发的动态按钮集用动态的（P2P 连接中），否则用离线 panel.json；
+        // 分组配色始终取离线主题包（动态按钮的 group 与离线同一套分组名）。
+        // 排布顺序完全由数据顺序驱动（aux 常驻键在前，自然占内环起始槽位）。
+        val dynamic = P2PState.dynamicButtons
         val items = ArrayList<RadialMenuView.Item>()
-        for (i in 0 until buttons.length()) {
-            val b = buttons.getJSONObject(i)
-            val group = groups?.optJSONObject(b.optString("group", "edit"))
-            val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
-            val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
-            items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", b.optString("icon", "")), resolveIconBitmap(b.optString("icon", "")), bg, accent))
+        if (dynamic != null) {
+            for (b in dynamic) {
+                val group = groups?.optJSONObject(b.group.ifEmpty { "edit" })
+                val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
+                val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
+                items.add(RadialMenuView.Item(b.id, b.label.ifEmpty { b.icon }, resolveIconBitmap(b.icon), bg, accent, b.aux))
+            }
+        } else {
+            val buttons = cfg.getJSONArray("buttons")
+            for (i in 0 until buttons.length()) {
+                val b = buttons.getJSONObject(i)
+                val group = groups?.optJSONObject(b.optString("group", "edit"))
+                val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
+                val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
+                items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", b.optString("icon", "")), resolveIconBitmap(b.optString("icon", "")), bg, accent, b.optBoolean("aux")))
+            }
         }
 
         val cxScreen = (bubbleParams?.x ?: 0) + bubbleSize / 2f

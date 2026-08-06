@@ -10,10 +10,18 @@ let SendMessageW = null;
 let ReleaseCapture = null;
 let SetWindowPos = null;
 let GetAsyncKeyState = null;
+// 前台窗口探测（目标绑定/场景切换用）：进程名 + 窗口标题
+let GetForegroundWindow = null;
+let GetWindowTextW = null;
+let GetWindowThreadProcessId = null;
+let OpenProcess = null;
+let QueryFullProcessImageNameW = null;
+let CloseHandle = null;
 function ensureWin32() {
   if (!SetWindowPos) {
     const koffi = require("koffi");
     const user32 = koffi.load("user32.dll");
+    const kernel32 = koffi.load("kernel32.dll");
     // HWND 必须按数值传（getNativeWindowHandle 返回的 Buffer 内容是句柄值，
     // 直接传 Buffer 会把「缓冲区地址」当句柄，调用静默失败——2026-08-02 实证）
     SendMessageW = user32.func("__stdcall", "SendMessageW", "long", ["uintptr_t", "uint", "uintptr_t", "long"]);
@@ -23,6 +31,13 @@ function ensureWin32() {
     // 拖球松手检测兜底：SetWindowPos 移动窗口会中断渲染端 pointer capture
     // （pointerup 丢失），本地鼠标场景用左键状态补一个可靠的收尾信号
     GetAsyncKeyState = user32.func("__stdcall", "GetAsyncKeyState", "short", ["int"]);
+    GetForegroundWindow = user32.func("__stdcall", "GetForegroundWindow", "uintptr_t", []);
+    GetWindowTextW = user32.func("__stdcall", "GetWindowTextW", "int", ["uintptr_t", "uint16_t *", "int"]);
+    GetWindowThreadProcessId = user32.func("__stdcall", "GetWindowThreadProcessId", "uint32_t", ["uintptr_t", "uint32_t *"]);
+    // PROCESS_QUERY_LIMITED_INFORMATION = 0x1000（权限要求最低，读进程映像名足够）
+    OpenProcess = kernel32.func("__stdcall", "OpenProcess", "uintptr_t", ["uint32_t", "bool", "uint32_t"]);
+    QueryFullProcessImageNameW = kernel32.func("__stdcall", "QueryFullProcessImageNameW", "bool", ["uintptr_t", "uint32_t", "uint16_t *", "uint32_t *"]);
+    CloseHandle = kernel32.func("__stdcall", "CloseHandle", "bool", ["uintptr_t"]);
   }
 }
 
@@ -64,63 +79,22 @@ function isPositionUsable(x, y, width, height) {
   return overlapX >= 80 && overlapY >= 80;
 }
 
-function loadJson(p) {
-  return JSON.parse(fs.readFileSync(p, "utf-8"));
+// 拖球边界（2026-08-06）：任何时刻整球在工作区内且与边缘保持 EDGE_MARGIN 极限距离。
+// 返回 [夹取后x, 夹取后y, workArea]；逻辑像素（SetWindowPos 前再按 scaleFactor 换算）。
+const EDGE_MARGIN = 12;
+function clampToWorkArea(nx, ny, w, h) {
+  const a = screen.getDisplayNearestPoint({ x: nx + w / 2, y: ny + h / 2 }).workArea;
+  const minX = a.x + EDGE_MARGIN, maxX = Math.max(minX, a.x + a.width - w - EDGE_MARGIN);
+  const minY = a.y + EDGE_MARGIN, maxY = Math.max(minY, a.y + a.height - h - EDGE_MARGIN);
+  return [Math.min(Math.max(nx, minX), maxX), Math.min(Math.max(ny, minY), maxY), a];
 }
 
-function isPlainObj(v) {
-  return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
-function deepMerge(base, over) {
-  if (!isPlainObj(base) || !isPlainObj(over)) return over === undefined ? base : over;
-  const out = { ...base };
-  for (const [k, v] of Object.entries(over)) {
-    out[k] = isPlainObj(v) && isPlainObj(out[k]) ? deepMerge(out[k], v) : v;
-  }
-  return out;
-}
-
-// 配置解析：用户配置只选主题/布局 + 微调，视觉在 themes/，编排在 layouts/。
-// 资源缺失时显式报错并回退默认，不静默降级。
-function resolveConfig() {
-  const user = loadJson(CONFIG_PATH);
-  const themeName = user.theme || "default";
-  const layoutName = user.layout || "left-dock";
-
-  let theme;
-  try {
-    theme = loadJson(path.join(ROOT, "themes", themeName, "theme.json"));
-  } catch (e) {
-    console.error(`[touchdeck] 主题 "${themeName}" 加载失败（${e.message}），回退 default`);
-    theme = loadJson(path.join(ROOT, "themes", "default", "theme.json"));
-  }
-
-  let layout;
-  try {
-    layout = loadJson(path.join(ROOT, "layouts", `${layoutName}.json`));
-  } catch (e) {
-    console.error(`[touchdeck] 布局 "${layoutName}" 加载失败（${e.message}），回退 left-dock`);
-    layout = loadJson(path.join(ROOT, "layouts", "left-dock.json"));
-  }
-
-  const mergedTheme = deepMerge(theme, user.themeOverrides || {});
-  const mergedLayout = deepMerge(layout, user.layoutOverrides || {});
-  if (!Array.isArray(mergedLayout.buttons) || mergedLayout.buttons.length === 0) {
-    throw new Error(`布局 "${layoutName}" 缺少 buttons 数组`);
-  }
-
-  return {
-    behavior: { idleDimSeconds: 5, confirmSeconds: 2.5, dragHoldMs: 500, ...(user.behavior || {}) },
-    themeName,
-    theme: mergedTheme,
-    layout: mergedLayout,
-    buttons: mergedLayout.buttons,
-    // 2026-08-05 定案：本机面板只保留悬浮球模式 + 键鼠交互（触控归安卓悬浮球端），
-    // 不再读 ui.mode / ui.input 配置
-    ui: { mode: "bubble", input: "mouse" },
-  };
-}
+// 配置解析已抽到共享模块（主进程与 scripts/build-panel-assets.mjs 同一份逻辑）：
+// 主题/布局解析、按钮与宏校验、auxButtons、scenarios、target 匹配
+const {
+  loadJson, deepMerge, matchTarget,
+  resolveConfig, resolveScenario, effectiveButtons, resolveIcon,
+} = require("./config-resolve");
 
 // nut-js 是 ESM 包，CJS 主进程里用动态 import
 let nutKeyboard = null;
@@ -168,46 +142,195 @@ async function sendKeys(keys) {
   }
 }
 
+// ===== 宏引擎：按钮动作 = 步骤序列（keys/text/paste/delay + times），纯输入模拟 =====
+// 三个触发源（本机 press、菜单选择、P2P peer-press）统一进 FIFO 串行队列：
+// 多设备并发触发时按键绝不交错（2026-08-05 定案：轻量复合指令，不做抢占/变量/分支）。
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const actionQueue = [];
+let actionRunning = false;
+const ACTION_QUEUE_MAX = 16;
+
+async function execStep(step) {
+  await ensureNut();
+  if (step.keys) return sendKeys(step.keys);
+  if (step.text !== undefined) return nutKeyboard.type(step.text);
+  if (step.paste !== undefined) {
+    // 中文/长文本/多行走剪贴板 + Ctrl+V：键码注入打不出中文，
+    // 剪贴板是不依赖目标应用 API 的唯一可靠通道
+    clipboard.writeText(step.paste);
+    await sleep(30); // 等剪贴板就绪再发粘贴键
+    return sendKeys({ ctrl: true, key: "v" });
+  }
+  if (step.delay !== undefined) return sleep(step.delay);
+}
+
+async function runMacro(btn) {
+  const gap = resolveConfig().behavior.macroStepGapMs ?? 40;
+  const steps = btn.macro || (btn.keys ? [{ keys: btn.keys }] : []);
+  if (!steps.length) throw new Error("按钮无动作配置");
+  // 含 paste 的宏：执行前快照剪贴板、结束（含失败）后恢复，不偷用户的剪贴板
+  const hasPaste = steps.some((s) => s.paste !== undefined);
+  const clipBackup = hasPaste ? clipboard.readText() : null;
+  try {
+    for (const step of steps) {
+      const times = step.times || 1;
+      for (let i = 0; i < times; i++) {
+        await execStep(step);
+        if (gap > 0) await sleep(gap);
+      }
+    }
+  } finally {
+    if (clipBackup !== null) clipboard.writeText(clipBackup);
+  }
+}
+
+// 动作反馈统一通道：控制台可见（拦截/失败 toast），同时写主进程日志
+function actionFeedback(fb) {
+  console.log("[touchdeck] action", JSON.stringify(fb));
+  if (consoleWin && !consoleWin.isDestroyed()) {
+    consoleWin.webContents.send("action-feedback", fb);
+  }
+  // 兼容旧通道：远程来源的失败/拦截仍走 peer-press-failed（控制台 toast 沿用）
+  if (fb.source === "peer" && !fb.ok && consoleWin && !consoleWin.isDestroyed()) {
+    consoleWin.webContents.send("peer-press-failed", fb.id);
+  }
+}
+
+// 入队即完成同步校验（未配置/target 拦截），通过则排队串行执行
+function enqueueAction(buttonId, source) {
+  const { buttons } = currentEffective();
+  const btn = buttons.find((b) => b.id === buttonId);
+  if (!btn) {
+    actionFeedback({ id: buttonId, ok: false, reason: "unconfigured", source });
+    return { ok: false, reason: "unconfigured" };
+  }
+  if (btn.target && !matchTarget(btn.target, fgCache)) {
+    const reason = `目标不匹配：前台是 ${fgCache.process || "未知"}`;
+    actionFeedback({ id: buttonId, ok: false, reason, source, blocked: true });
+    return { ok: false, reason: "target-mismatch" };
+  }
+  if (actionQueue.length >= ACTION_QUEUE_MAX) {
+    actionFeedback({ id: buttonId, ok: false, reason: "队列溢出丢弃", source });
+    return { ok: false, reason: "queue-full" };
+  }
+  actionQueue.push({ btn, source });
+  pumpActions();
+  return { ok: true, queued: true };
+}
+
+async function pumpActions() {
+  if (actionRunning) return;
+  actionRunning = true;
+  while (actionQueue.length) {
+    const { btn, source } = actionQueue.shift();
+    try {
+      await runMacro(btn);
+      actionFeedback({ id: btn.id, ok: true, source });
+    } catch (err) {
+      // 某步抛错：中止当前宏（剩余步骤不执行），队列继续
+      actionFeedback({ id: btn.id, ok: false, reason: String((err && err.message) || err), source });
+    }
+  }
+  actionRunning = false;
+}
+
+// ===== 前台窗口探测 + 场景切换（目标绑定的判定依据）=====
+// 面板窗口 focusable:false，GetForegroundWindow 始终指向目标应用；
+// 500ms 轮询缓存，触发校验与场景切换都用缓存值，不在注入热路径上调 Win32。
+let fgCache = { pid: 0, process: "", title: "" };
+let activeScenario = undefined; // undefined=未初始化；null=默认场景
+
+function pollForeground() {
+  try {
+    ensureWin32();
+    const hwnd = GetForegroundWindow();
+    if (!hwnd) return;
+    const tbuf = new Uint16Array(512);
+    const tn = GetWindowTextW(hwnd, tbuf, tbuf.length);
+    const title = String.fromCharCode(...tbuf.slice(0, tn));
+    const pidArr = new Uint32Array(1);
+    GetWindowThreadProcessId(hwnd, pidArr);
+    const pid = pidArr[0];
+    let process = "";
+    const h = OpenProcess(0x1000, false, pid);
+    if (h) {
+      const pbuf = new Uint16Array(512);
+      const sz = new Uint32Array([pbuf.length]);
+      if (QueryFullProcessImageNameW(h, 0, pbuf, sz)) {
+        process = String.fromCharCode(...pbuf.slice(0, sz[0])).split(/[\\/]/).pop();
+      }
+      CloseHandle(h);
+    }
+    if (fgCache.process !== process || fgCache.title !== title) {
+      fgCache = { pid, process, title };
+      console.log("[touchdeck] 前台变化:", process, "|", title.slice(0, 40));
+      onForegroundChange();
+    }
+  } catch (e) {
+    console.error("[touchdeck] 前台探测失败:", e.message);
+  }
+}
+
+// 当前有效按钮集/布局（aux 常驻 + 场景）；菜单渲染与动作分发共用同一份
+function currentEffective() {
+  const config = resolveConfig();
+  const sc = resolveScenario(config, fgCache);
+  return {
+    config,
+    scenario: sc.name,
+    layout: sc.layout,
+    buttons: effectiveButtons(config, sc.buttons),
+  };
+}
+
+function onForegroundChange() {
+  const eff = currentEffective();
+  if (eff.scenario === activeScenario) return;
+  activeScenario = eff.scenario;
+  console.log("[touchdeck] 场景切换:", activeScenario || "默认", "前台:", fgCache.process);
+  if (menuWin && !menuWin.isDestroyed()) menuWin.webContents.send("menu-reload");
+  if (consoleWin && !consoleWin.isDestroyed()) {
+    consoleWin.webContents.send("scenario-changed", { scenario: activeScenario, foreground: fgCache.process });
+  }
+  broadcastButtons();
+}
+
+// host→client 按钮集推送：设备上线或场景切换时经 DataChannel 下发，
+// 安卓端动态重渲染（离线 panel.json 仅是未连接时的兜底）
+function publicButton(b) {
+  return { id: b.id, icon: b.icon, label: b.label, sub: b.sub, group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux };
+}
+
+function broadcastButtons() {
+  if (!peerWin || peerWin.isDestroyed()) return;
+  const eff = currentEffective();
+  peerWin.webContents.send("peer-broadcast", { type: "buttons", buttons: eff.buttons.map(publicButton) });
+}
+
 // 通用 IPC：配置/图标/注入/拖拽。
 // 在 app.whenReady 统一注册，不再挂某个窗口的创建流程上。
 function registerCommonIpc() {
-  ipcMain.handle("get-config", () => resolveConfig());
+  // 配置 + 当前有效按钮集（aux 常驻 + 场景命中）+ 前台状态：菜单渲染与控制台共用
+  ipcMain.handle("get-config", () => {
+    const eff = currentEffective();
+    return {
+      ...eff.config,
+      effectiveButtons: eff.buttons,
+      effectiveLayout: eff.layout,
+      activeScenario: eff.scenario,
+      foreground: fgCache.process || null,
+    };
+  });
 
-  // 图标解析（优先级从高到低）：themes/<当前主题>/icons/<name>.svg|png → icons/<name>.svg。
-  // 返回 { kind: "svg"|"png", data }；找不到返回 null（渲染端回退 emoji 文字）。
+  // 图标缓存壳：解析逻辑在共享模块（scripts/build-panel-assets.mjs 同用）
   const iconCache = new Map();
-  function resolveIcon(name) {
-    if (!/^[a-z0-9-]+$/.test(name)) return null;
-    const themeName = resolveConfig().themeName;
-    const candidates = [
-      path.join(ROOT, "themes", themeName, "icons", `${name}.svg`),
-      path.join(ROOT, "themes", themeName, "icons", `${name}.png`),
-      path.join(ROOT, "icons", `${name}.svg`),
-    ];
-    for (const p of candidates) {
-      try {
-        const buf = fs.readFileSync(p);
-        if (p.endsWith(".svg")) return { kind: "svg", data: buf.toString("utf-8") };
-        return { kind: "png", data: "data:image/png;base64," + buf.toString("base64") };
-      } catch { /* 下一个候选 */ }
-    }
-    return null;
-  }
   ipcMain.handle("get-icon", (_e, name) => {
-    if (!iconCache.has(name)) iconCache.set(name, resolveIcon(name));
+    if (!iconCache.has(name)) iconCache.set(name, resolveIcon(resolveConfig().themeName, name));
     return iconCache.get(name);
   });
 
-  ipcMain.handle("press", async (_e, buttonId) => {
-    const btn = resolveConfig().buttons.find((b) => b.id === buttonId);
-    if (!btn || !btn.keys) return { ok: false, reason: "unconfigured" };
-    try {
-      await sendKeys(btn.keys);
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, reason: String(err) };
-    }
-  });
+  // 本机面板触发：同步校验（未配置/target 拦截）后入宏队列串行执行
+  ipcMain.handle("press", (_e, buttonId) => enqueueAction(buttonId, "local"));
 
   // 临时诊断：截全屏验证窗口真实可见性（desktopCapturer 走 WGC，能抓透明分层窗口）
   ipcMain.handle("debug-shot", async () => {
@@ -221,26 +344,62 @@ function registerCommonIpc() {
   //  Modal 移动循环 WM_NCLBUTTONDOWN/SC_MOVE 在 focusable:false 窗口上无效，均不可走）
   // SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOOWNERZORDER = 0x0215
   // （误用 0x0233 会带上 SWP_NOMOVE(0x0002)：调用返回成功但位置永远不变——2026-08-02 实证）
+  // ===== 拖球边界与吸附（2026-08-06）=====
+  // 拖动全程夹取在工作区内（逻辑像素）；松手按阈值吸附：距边 ≤64px 才吸该边，
+  // 四边独立判定、邻边同入阈即吸角，吸附后与边缘保持 EDGE_MARGIN 极限距离。
   const dragTarget = () => bubbleWin;
   let dragTimer = null;
+  let snapAnim = null; // 吸附动画句柄：新拖拽/新收尾必须掐断旧动画，否则两套 SetWindowPos 打架
   const endDrag = (tag) => {
     if (!dragTimer) return;
     clearInterval(dragTimer);
     dragTimer = null;
+    clearInterval(snapAnim);
+    snapAnim = null;
     const w = dragTarget();
     if (!w) return;
+    // 渲染端 pointerup 常被 SetWindowPos 打断丢失，armed 视觉由主进程通知兜底复位
+    if (!w.isDestroyed()) w.webContents.send("drag-ended");
     const [ex, ey] = w.getPosition();
-    saveState({ x: ex, y: ey }); // SetWindowPos 移动未必触发 moved 事件，这里兜底持久化
-    console.log("[touchdeck] drag end" + tag, JSON.stringify([ex, ey]));
+    const [bw, bh] = w.getSize();
+    const [cx, cy, area] = clampToWorkArea(ex, ey, bw, bh);
+    // 吸附（2026-08-06 修订）：松手位置距某边 ≤ SNAP_THRESHOLD 才吸该边，否则停原位。
+    // 两轴独立判定——邻边同时入阈即四角吸附（如左上 = 吸左 + 吸顶），吸后边距 EDGE_MARGIN。
+    const SNAP_THRESHOLD = 64;
+    let tx = cx, ty = cy;
+    const dl = ex - area.x, dr = area.x + area.width - (ex + bw);
+    const dt = ey - area.y, db = area.y + area.height - (ey + bh);
+    if (Math.min(dl, dr) <= SNAP_THRESHOLD) tx = dl <= dr ? area.x + EDGE_MARGIN : area.x + area.width - bw - EDGE_MARGIN;
+    if (Math.min(dt, db) <= SNAP_THRESHOLD) ty = dt <= db ? area.y + EDGE_MARGIN : area.y + area.height - bh - EDGE_MARGIN;
+    // ~140ms 缓动滑到边缘（SetWindowPos 物理像素，按目标显示器缩放换算）
+    const scale = screen.getDisplayNearestPoint({ x: tx, y: ty }).scaleFactor || 1;
+    const hwnd = hwndOf(w);
+    const t0 = Date.now();
+    snapAnim = setInterval(() => {
+      if (w.isDestroyed()) { clearInterval(snapAnim); snapAnim = null; return; }
+      const k = Math.min(1, (Date.now() - t0) / 140);
+      const e = 1 - Math.pow(1 - k, 2);
+      const px = Math.round(ex + (tx - ex) * e), py = Math.round(ey + (ty - ey) * e);
+      SetWindowPos(hwnd, 0, Math.round(px * scale), Math.round(py * scale), 0, 0, 0x0215);
+      if (k >= 1) {
+        clearInterval(snapAnim);
+        snapAnim = null;
+        saveState({ x: tx, y: ty }); // 持久化吸附后的位置（重启恢复不越界）
+        console.log("[touchdeck] drag end" + tag, "snap ->", JSON.stringify([tx, ty]));
+      }
+    }, 16);
   };
   ipcMain.on("start-drag", () => {
     const w = dragTarget();
     if (!w) return;
+    clearInterval(snapAnim); // 掐断进行中的吸附动画，防与拖拽 SetWindowPos 互相覆盖
+    snapAnim = null;
     ensureWin32();
     ReleaseCapture();
     const hwnd = hwndOf(w);
     const startCursor = screen.getCursorScreenPoint();
     const [wx, wy] = w.getPosition();
+    const [bw, bh] = w.getSize();
     let lastX = wx, lastY = wy;
     let dbgTick = 0; // 临时诊断：覆盖整个移动阶段，含 winpos 与 SetWindowPos 返回值
     let stillTicks = 0; // 静止计时：光标 ~800ms 无移动自动收尾（松手信号丢失时防拖拽僵死）
@@ -253,8 +412,12 @@ function registerCommonIpc() {
         const vk = GetAsyncKeyState(0x01);
         if (!(vk & 0x8000)) { endDrag(" (key-up)"); return; }
         const pt = screen.getCursorScreenPoint();
-        const nx = Math.round(wx + pt.x - startCursor.x);
-        const ny = Math.round(wy + pt.y - startCursor.y);
+        // 拖动全程夹取在工作区内（含边缘极限距离）：球不越屏，松手再吸附
+        const [nx, ny] = clampToWorkArea(
+          Math.round(wx + pt.x - startCursor.x),
+          Math.round(wy + pt.y - startCursor.y),
+          bw, bh
+        );
         dbgTick++;
         if (dbgTick > 750) { endDrag(" (timeout)"); return; } // 硬上限 ~12s
         if (nx === lastX && ny === lastY) {
@@ -303,6 +466,8 @@ function createBubbleWindow() {
     x = saved.x;
     y = saved.y;
   }
+  // 启动也走边界夹取：记忆位置合法但贴边过近（或 DPI/分辨率变过）时拉回极限距离内
+  [x, y] = clampToWorkArea(x, y, ballSize, ballSize);
 
   bubbleWin = new BrowserWindow({
     width: ballSize, height: ballSize, x, y,
@@ -363,16 +528,9 @@ function closeMenuWindow() {
   menuWin = null;
 }
 
-ipcMain.on("menu-select", async (_e, buttonId) => {
-  const btn = resolveConfig().buttons.find((b) => b.id === buttonId);
-  if (btn && btn.keys) {
-    try {
-      await sendKeys(btn.keys);
-      console.log("[touchdeck] menu press", buttonId);
-    } catch (err) {
-      console.error("[touchdeck] menu press error:", err.message);
-    }
-  }
+ipcMain.on("menu-select", (_e, buttonId) => {
+  const r = enqueueAction(buttonId, "menu");
+  if (r.ok) console.log("[touchdeck] menu press", buttonId);
   closeMenuWindow();
 });
 
@@ -559,22 +717,12 @@ function registerPeerIpc() {
     return { ok: true };
   });
   ipcMain.handle("peer-status-get", () => peerStatus);
-  ipcMain.on("peer-press", async (_e, buttonId) => {
-    const btn = resolveConfig().buttons.find((b) => b.id === buttonId);
-    if (!btn || !btn.keys) {
-      console.error("[touchdeck] peer press 未配置:", buttonId);
-      if (consoleWin && !consoleWin.isDestroyed()) consoleWin.webContents.send("peer-press-failed", buttonId);
-      return;
-    }
-    try {
-      await sendKeys(btn.keys);
-      console.log("[touchdeck] peer press", buttonId);
-    } catch (err) {
-      console.error("[touchdeck] peer press error:", err.message);
-      // 注入失败必须可见（旧版只写日志，控制台无感知）
-      if (consoleWin && !consoleWin.isDestroyed()) consoleWin.webContents.send("peer-press-failed", buttonId);
-    }
+  ipcMain.on("peer-press", (_e, buttonId) => {
+    const r = enqueueAction(buttonId, "peer");
+    if (r.ok) console.log("[touchdeck] peer press", buttonId);
   });
+  // 设备通道上线：把当前有效按钮集推下去（安卓动态渲染；离线 panel.json 仅兜底）
+  ipcMain.on("peer-channel-open", () => broadcastButtons());
 }
 
 // ===== 启动 =====
@@ -601,6 +749,10 @@ app.whenReady().then(() => {
   createTray();
   registerTabShortcut();
   startPanel(); // 控制台打开时自动按配置启动面板（开箱即用）
+
+  // 前台窗口轮询：target 校验与场景切换的判定依据（500ms 缓存，不入注入热路径）
+  pollForeground();
+  setInterval(pollForeground, 500);
 
   // 系统缩放/分辨率变化：重建面板（球/菜单尺寸位置随新 DPI 校正），防抖 500ms
   let dpiTimer = null;

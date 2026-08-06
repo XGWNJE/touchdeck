@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   press: (id) => ipcRenderer.invoke("press", id),
   startDrag: () => ipcRenderer.send("start-drag"),
   stopDrag: () => ipcRenderer.send("stop-drag"),
+  onDragEnded: (cb) => ipcRenderer.on("drag-ended", () => cb()),
   debugShot: () => ipcRenderer.invoke("debug-shot"),
   // 悬浮球模式（bubble.html / menu.html）
   closeMenu: () => ipcRenderer.send("close-menu"),
@@ -14,6 +15,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   dismiss: () => ipcRenderer.send("close-menu"),
   onMenuInit: (cb) => ipcRenderer.on("menu-init", (_e, init) => cb(init)),
   onMenuConfirm: (cb) => ipcRenderer.on("menu-confirm", () => cb()),
+  onMenuReload: (cb) => ipcRenderer.on("menu-reload", () => cb()),
   // 控制台（console.html）
   consoleStatus: () => ipcRenderer.invoke("console-status"),
   consoleTogglePanel: () => ipcRenderer.invoke("console-toggle-panel"),
@@ -28,4 +30,10 @@ contextBridge.exposeInMainWorld("touchdeck", {
   onPeerStatus: (cb) => ipcRenderer.on("peer-status", (_e, s) => cb(s)),
   onPanelStatus: (cb) => ipcRenderer.on("panel-status", (_e, s) => cb(s)),
   onPeerPressFailed: (cb) => ipcRenderer.on("peer-press-failed", (_e, id) => cb(id)),
+  // 宏引擎反馈（拦截/失败/成功）与场景切换通知（控制台可见性）
+  onActionFeedback: (cb) => ipcRenderer.on("action-feedback", (_e, fb) => cb(fb)),
+  onScenarioChanged: (cb) => ipcRenderer.on("scenario-changed", (_e, s) => cb(s)),
+  // host→client 按钮集推送：主进程转发给 peer.html，经 DataChannel 广播
+  onPeerBroadcast: (cb) => ipcRenderer.on("peer-broadcast", (_e, payload) => cb(payload)),
+  peerChannelOpen: () => ipcRenderer.send("peer-channel-open"),
 });

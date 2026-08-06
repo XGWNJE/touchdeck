@@ -13,984 +13,1454 @@
   },
   "buttons": [
     {
+      "id": "demo-compose",
+      "icon": "zap",
+      "label": "复合宏",
+      "sub": "text+enter",
+      "group": "agent",
+      "macro": [
+        {
+          "text": "macro-ok"
+        },
+        {
+          "delay": 150
+        },
+        {
+          "keys": {
+            "key": "enter"
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-paste",
+      "icon": "clipboard-paste",
+      "label": "中文宏",
+      "sub": "paste",
+      "group": "cmd",
+      "macro": [
+        {
+          "paste": "中文宏通道"
+        },
+        {
+          "keys": {
+            "key": "enter"
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-target",
+      "icon": "at-sign",
+      "label": "目标宏",
+      "sub": "仅记事本",
+      "group": "edit",
+      "target": {
+        "process": "notepad"
+      },
+      "keys": {
+        "text": "tgt"
+      }
+    },
+    {
       "id": "fill01",
       "icon": "mic",
       "label": "测01",
       "sub": "T01",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill02",
       "icon": "zap",
       "label": "测02",
       "sub": "T02",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill03",
       "icon": "hand",
       "label": "测03",
       "sub": "T03",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill04",
       "icon": "send",
       "label": "测04",
       "sub": "T04",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill05",
       "icon": "delete",
       "label": "测05",
       "sub": "T05",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill06",
       "icon": "slash",
       "label": "测06",
       "sub": "T06",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill07",
       "icon": "clipboard-list",
       "label": "测07",
       "sub": "T07",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill08",
       "icon": "square-dashed",
       "label": "测08",
       "sub": "T08",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill09",
       "icon": "corner-down-left",
       "label": "测09",
       "sub": "T09",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill10",
       "icon": "at-sign",
       "label": "测10",
       "sub": "T10",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill11",
       "icon": "copy",
       "label": "测11",
       "sub": "T11",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill12",
       "icon": "clipboard-paste",
       "label": "测12",
       "sub": "T12",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill13",
       "icon": "mic",
       "label": "测13",
       "sub": "T13",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill14",
       "icon": "zap",
       "label": "测14",
       "sub": "T14",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill15",
       "icon": "hand",
       "label": "测15",
       "sub": "T15",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill16",
       "icon": "send",
       "label": "测16",
       "sub": "T16",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill17",
       "icon": "delete",
       "label": "测17",
       "sub": "T17",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill18",
       "icon": "slash",
       "label": "测18",
       "sub": "T18",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill19",
       "icon": "clipboard-list",
       "label": "测19",
       "sub": "T19",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill20",
       "icon": "square-dashed",
       "label": "测20",
       "sub": "T20",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill21",
       "icon": "corner-down-left",
       "label": "测21",
       "sub": "T21",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill22",
       "icon": "at-sign",
       "label": "测22",
       "sub": "T22",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill23",
       "icon": "copy",
       "label": "测23",
       "sub": "T23",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill24",
       "icon": "clipboard-paste",
       "label": "测24",
       "sub": "T24",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill25",
       "icon": "mic",
       "label": "测25",
       "sub": "T25",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill26",
       "icon": "zap",
       "label": "测26",
       "sub": "T26",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill27",
       "icon": "hand",
       "label": "测27",
       "sub": "T27",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill28",
       "icon": "send",
       "label": "测28",
       "sub": "T28",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill29",
       "icon": "delete",
       "label": "测29",
       "sub": "T29",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill30",
       "icon": "slash",
       "label": "测30",
       "sub": "T30",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill31",
       "icon": "clipboard-list",
       "label": "测31",
       "sub": "T31",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill32",
       "icon": "square-dashed",
       "label": "测32",
       "sub": "T32",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill33",
       "icon": "corner-down-left",
       "label": "测33",
       "sub": "T33",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill34",
       "icon": "at-sign",
       "label": "测34",
       "sub": "T34",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill35",
       "icon": "copy",
       "label": "测35",
       "sub": "T35",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill36",
       "icon": "clipboard-paste",
       "label": "测36",
       "sub": "T36",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill37",
       "icon": "mic",
       "label": "测37",
       "sub": "T37",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill38",
       "icon": "zap",
       "label": "测38",
       "sub": "T38",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill39",
       "icon": "hand",
       "label": "测39",
       "sub": "T39",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill40",
       "icon": "send",
       "label": "测40",
       "sub": "T40",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill41",
       "icon": "delete",
       "label": "测41",
       "sub": "T41",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill42",
       "icon": "slash",
       "label": "测42",
       "sub": "T42",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill43",
       "icon": "clipboard-list",
       "label": "测43",
       "sub": "T43",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill44",
       "icon": "square-dashed",
       "label": "测44",
       "sub": "T44",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill45",
       "icon": "corner-down-left",
       "label": "测45",
       "sub": "T45",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill46",
       "icon": "at-sign",
       "label": "测46",
       "sub": "T46",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill47",
       "icon": "copy",
       "label": "测47",
       "sub": "T47",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill48",
       "icon": "clipboard-paste",
       "label": "测48",
       "sub": "T48",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill49",
       "icon": "mic",
       "label": "测49",
       "sub": "T49",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill50",
       "icon": "zap",
       "label": "测50",
       "sub": "T50",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill51",
       "icon": "hand",
       "label": "测51",
       "sub": "T51",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill52",
       "icon": "send",
       "label": "测52",
       "sub": "T52",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill53",
       "icon": "delete",
       "label": "测53",
       "sub": "T53",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill54",
       "icon": "slash",
       "label": "测54",
       "sub": "T54",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill55",
       "icon": "clipboard-list",
       "label": "测55",
       "sub": "T55",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill56",
       "icon": "square-dashed",
       "label": "测56",
       "sub": "T56",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill57",
       "icon": "corner-down-left",
       "label": "测57",
       "sub": "T57",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill58",
       "icon": "at-sign",
       "label": "测58",
       "sub": "T58",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill59",
       "icon": "copy",
       "label": "测59",
       "sub": "T59",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill60",
       "icon": "clipboard-paste",
       "label": "测60",
       "sub": "T60",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill61",
       "icon": "mic",
       "label": "测61",
       "sub": "T61",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill62",
       "icon": "zap",
       "label": "测62",
       "sub": "T62",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill63",
       "icon": "hand",
       "label": "测63",
       "sub": "T63",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill64",
       "icon": "send",
       "label": "测64",
       "sub": "T64",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill65",
       "icon": "delete",
       "label": "测65",
       "sub": "T65",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill66",
       "icon": "slash",
       "label": "测66",
       "sub": "T66",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill67",
       "icon": "clipboard-list",
       "label": "测67",
       "sub": "T67",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill68",
       "icon": "square-dashed",
       "label": "测68",
       "sub": "T68",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill69",
       "icon": "corner-down-left",
       "label": "测69",
       "sub": "T69",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill70",
       "icon": "at-sign",
       "label": "测70",
       "sub": "T70",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill71",
       "icon": "copy",
       "label": "测71",
       "sub": "T71",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill72",
       "icon": "clipboard-paste",
       "label": "测72",
       "sub": "T72",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill73",
       "icon": "mic",
       "label": "测73",
       "sub": "T73",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill74",
       "icon": "zap",
       "label": "测74",
       "sub": "T74",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill75",
       "icon": "hand",
       "label": "测75",
       "sub": "T75",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill76",
       "icon": "send",
       "label": "测76",
       "sub": "T76",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill77",
       "icon": "delete",
       "label": "测77",
       "sub": "T77",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill78",
       "icon": "slash",
       "label": "测78",
       "sub": "T78",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill79",
       "icon": "clipboard-list",
       "label": "测79",
       "sub": "T79",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill80",
       "icon": "square-dashed",
       "label": "测80",
       "sub": "T80",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill81",
       "icon": "corner-down-left",
       "label": "测81",
       "sub": "T81",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill82",
       "icon": "at-sign",
       "label": "测82",
       "sub": "T82",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill83",
       "icon": "copy",
       "label": "测83",
       "sub": "T83",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill84",
       "icon": "clipboard-paste",
       "label": "测84",
       "sub": "T84",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill85",
       "icon": "mic",
       "label": "测85",
       "sub": "T85",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill86",
       "icon": "zap",
       "label": "测86",
       "sub": "T86",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill87",
       "icon": "hand",
       "label": "测87",
       "sub": "T87",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill88",
       "icon": "send",
       "label": "测88",
       "sub": "T88",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill89",
       "icon": "delete",
       "label": "测89",
       "sub": "T89",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill90",
       "icon": "slash",
       "label": "测90",
       "sub": "T90",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill91",
       "icon": "clipboard-list",
       "label": "测91",
       "sub": "T91",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill92",
       "icon": "square-dashed",
       "label": "测92",
       "sub": "T92",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill93",
       "icon": "corner-down-left",
       "label": "测93",
       "sub": "T93",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill94",
       "icon": "at-sign",
       "label": "测94",
       "sub": "T94",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill95",
       "icon": "copy",
       "label": "测95",
       "sub": "T95",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill96",
       "icon": "clipboard-paste",
       "label": "测96",
       "sub": "T96",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill97",
       "icon": "mic",
       "label": "测97",
       "sub": "T97",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill98",
       "icon": "zap",
       "label": "测98",
       "sub": "T98",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill99",
       "icon": "hand",
       "label": "测99",
       "sub": "T99",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill100",
       "icon": "send",
       "label": "测100",
       "sub": "T100",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill101",
       "icon": "delete",
       "label": "测101",
       "sub": "T101",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill102",
       "icon": "slash",
       "label": "测102",
       "sub": "T102",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill103",
       "icon": "clipboard-list",
       "label": "测103",
       "sub": "T103",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill104",
       "icon": "square-dashed",
       "label": "测104",
       "sub": "T104",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill105",
       "icon": "corner-down-left",
       "label": "测105",
       "sub": "T105",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill106",
       "icon": "at-sign",
       "label": "测106",
       "sub": "T106",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill107",
       "icon": "copy",
       "label": "测107",
       "sub": "T107",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill108",
       "icon": "clipboard-paste",
       "label": "测108",
       "sub": "T108",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill109",
       "icon": "mic",
       "label": "测109",
       "sub": "T109",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill110",
       "icon": "zap",
       "label": "测110",
       "sub": "T110",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill111",
       "icon": "hand",
       "label": "测111",
       "sub": "T111",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill112",
       "icon": "send",
       "label": "测112",
       "sub": "T112",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill113",
       "icon": "delete",
       "label": "测113",
       "sub": "T113",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill114",
       "icon": "slash",
       "label": "测114",
       "sub": "T114",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill115",
       "icon": "clipboard-list",
       "label": "测115",
       "sub": "T115",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill116",
       "icon": "square-dashed",
       "label": "测116",
       "sub": "T116",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill117",
       "icon": "corner-down-left",
       "label": "测117",
       "sub": "T117",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill118",
       "icon": "at-sign",
       "label": "测118",
       "sub": "T118",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill119",
       "icon": "copy",
       "label": "测119",
       "sub": "T119",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill120",
       "icon": "clipboard-paste",
       "label": "测120",
       "sub": "T120",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill121",
       "icon": "mic",
       "label": "测121",
       "sub": "T121",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill122",
       "icon": "zap",
       "label": "测122",
       "sub": "T122",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill123",
       "icon": "hand",
       "label": "测123",
       "sub": "T123",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill124",
       "icon": "send",
       "label": "测124",
       "sub": "T124",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill125",
       "icon": "delete",
       "label": "测125",
       "sub": "T125",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill126",
       "icon": "slash",
       "label": "测126",
       "sub": "T126",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill127",
       "icon": "clipboard-list",
       "label": "测127",
       "sub": "T127",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill128",
       "icon": "square-dashed",
       "label": "测128",
       "sub": "T128",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill129",
       "icon": "corner-down-left",
       "label": "测129",
       "sub": "T129",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill130",
       "icon": "at-sign",
       "label": "测130",
       "sub": "T130",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill131",
       "icon": "copy",
       "label": "测131",
       "sub": "T131",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill132",
       "icon": "clipboard-paste",
       "label": "测132",
       "sub": "T132",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill133",
       "icon": "mic",
       "label": "测133",
       "sub": "T133",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill134",
       "icon": "zap",
       "label": "测134",
       "sub": "T134",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill135",
       "icon": "hand",
       "label": "测135",
       "sub": "T135",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill136",
       "icon": "send",
       "label": "测136",
       "sub": "T136",
-      "group": "voice"
+      "group": "voice",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill137",
       "icon": "delete",
       "label": "测137",
       "sub": "T137",
-      "group": "agent"
+      "group": "agent",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill138",
       "icon": "slash",
       "label": "测138",
       "sub": "T138",
-      "group": "danger"
+      "group": "danger",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill139",
       "icon": "clipboard-list",
       "label": "测139",
       "sub": "T139",
-      "group": "edit"
+      "group": "edit",
+      "keys": {
+        "text": ""
+      }
     },
     {
       "id": "fill140",
       "icon": "square-dashed",
       "label": "测140",
       "sub": "T140",
-      "group": "cmd"
+      "group": "cmd",
+      "keys": {
+        "text": ""
+      }
     }
   ],
   "showLabel": true,
