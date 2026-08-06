@@ -1,6 +1,6 @@
 {
   "name": "touchdeck-signal",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "TouchDeck P2P 信令服务：WebSocket 房间配对 + SDP/ICE 中继 + TURN 凭据下发",
   "type": "module",
   "main": "signal.mjs",
