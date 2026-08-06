@@ -43,6 +43,15 @@
 - 扇区不填色、发丝白环+径向分割线、白图标小标签、选中扇区青色（0xFF22D3EE）发光外弧（递宽递淡三描边近似，硬件加速下 BlurMaskFilter 不可靠）+ 淡青填充。
 - 不要全局压暗遮罩（用户明确：只有菜单影响画面）；可识别度靠扇区黑透底 0xA6000000（局部磨砂近似，悬浮窗无截屏权限做不到真毛玻璃）。
 
+## 配置资源包与按键写法（声明式自定义事实）
+
+- **主题皮肤** `themes/<主题名>/theme.json`：颜色、圆角、字号、透明度、分组色板、按下/二次确认态。复制 `themes/default/` 改色即得新皮肤；`groups` 里加新色板即新增按钮分组。
+- **布局编排** `layouts/<布局名>.json`：按钮尺寸/间距/列数/停靠位置/缩放，以及按钮清单（图标、文字、分组、按键组合、`confirm: true` 二次确认）；`showLabel`/`showSub` 可隐藏文字、纯图标显示（图标自动放大 1.5 倍）。
+- **图标** `icons/<名称>.svg`：Lucide 描边风格，`currentColor` 随主题文字色；新增 = 放一个 24×24 描边 SVG 进 `icons/`。解析优先级：`themes/<当前主题>/icons/`（.svg 或 .png）→ 全局 `icons/`（.svg）→ emoji/字符回退。
+- **用户配置** `touchdeck.config.json`：`theme`/`layout` 选包，`behavior` 调行为（变暗秒数、确认窗口、拖动阈值），`themeOverrides`/`layoutOverrides` 深度合并做局部微调。
+- **按键写法**：`{ "ctrl": true, "key": "s" }` 发组合键；`{ "text": "/" }` 直接输入字符；只写修饰键（如 `{ "ctrl": true, "win": true, "shift": true }`）发纯修饰键组合（微信输入法语音输入即此例）。
+- 出厂预设：主题 `default`（深色 + Lucide SVG 图标）、`light`（浅色）、`mono`（深色 + AI 生成描边图标，PNG）；布局 `left-dock`（2×6 左缘）、`bottom-bar`（6×2 底部）、`right-block`（4×3 右缘）。
+
 ## 宏引擎与目标绑定（2026-08-06 实证）
 
 - **IME 是 text/keys 步骤的环境变量**：目标窗口挂着中文输入法时，`text` 步骤的字母进候选框不直接落字，此时 `Enter` 被 IME 吞去「上屏候选」而不是换行（实测：macro-ok 落字但尾部换行丢失；tgt 触发候选条）。`paste` 步骤完全免疫（剪贴板不经过 IME）。**宏设计原则：中文/关键文本走 paste；text 仅用于确定无 IME 的场景（终端/英文输入态）**。
