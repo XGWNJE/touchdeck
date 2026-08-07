@@ -12,11 +12,13 @@
 
 ## 界面展示
 
-![Windows 悬浮球·径向菜单](screenshots/windows-menu.jpg)
+<div align="center">
 
-![安卓悬浮球·径向菜单](screenshots/android-menu.png)
+| Windows 径向菜单 | 安卓径向菜单 | 安卓 P2P 配对 |
+|:----------------:|:------------:|:-------------:|
+| <img src="screenshots/windows-menu.jpg" width="200" /> | <img src="screenshots/android-menu.png" width="175" /> | <img src="screenshots/android-p2p.png" width="390" /> |
 
-![安卓端 P2P 直连·房间码配对](screenshots/android-p2p.png)
+</div>
 
 ## 产品路线
 
@@ -33,4 +35,5 @@
 - README.md：本文件，面向人——项目干什么、怎么开始
 - AGENTS.md：面向 Agent 的完整操作规则（铁律/关键路径命令/验证矩阵/发包流程）
 - docs/roadmap.md：产品路线——定位、自定义能力边界、场景预设包、版本排期
+- CHANGELOG.md：加工历史——各版本新增/修复/变更（GitHub Release 更新说明的事实来源）
 - docs/touchdeck-notes.md：知识沉淀——踩坑实证、布局/皮肤规范、配置写法、交互手势细节

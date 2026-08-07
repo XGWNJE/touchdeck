@@ -105,6 +105,9 @@ jobs:
     needs: [android-build, electron-package, signal-package]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout（读 CHANGELOG.md 生成更新说明）
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -113,16 +116,28 @@ jobs:
       - name: Create/update release
         env:
           GH_TOKEN: ${{ github.token }}
-          # publish job 不 checkout 仓库，gh 需要 GH_REPO 定位目标仓库（2026-08-06 v0.1.7 实证：
-          # 缺了报 fatal: not a git repository）
+          # gh 需要 GH_REPO 定位目标仓库（2026-08-06 v0.1.7 实证：缺了报 fatal: not a git repository）
           GH_REPO: ${{ github.repository }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           ASSETS=""
           while IFS= read -r f; do ASSETS="${ASSETS} ${f}"; done < <(find dist-assets -type f)
+          # 更新说明唯一事实来源 = CHANGELOG.md 当前版本节（doc-structure 归口，2026-08-06 定案）；
+          # 缺节直接失败——不发简陋文案，倒逼发包第 1 步先写 CHANGELOG
+          awk -v h="## ${TAG}" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f{print}' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md 缺少 ${TAG} 版本节——发包流程第 1 步必须先写更新说明"
+            exit 1
+          fi
+          {
+            echo "发行物：安卓 APK + Windows 安装包（setup + portable）+ 信令服务包（tar.gz）。"
+            echo ""
+            cat release-notes.md
+          } > release-notes-full.md
           if ! gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release create "${TAG}" ${ASSETS} --title "TouchDeck ${TAG}" --notes "三端发行物：安卓 APK + Windows 安装包（setup + portable）+ 信令服务包。"
+            gh release create "${TAG}" ${ASSETS} --title "TouchDeck ${TAG}" --notes-file release-notes-full.md
           else
             gh release upload "${TAG}" ${ASSETS} --clobber
+            gh release edit "${TAG}" --notes-file release-notes-full.md
           fi
 

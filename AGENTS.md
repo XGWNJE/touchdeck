@@ -43,12 +43,12 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 
 发包流程（严格按顺序）：
 
-1. **版本号三处同步**（不一致一律不许发包）：`package.json`（主程序）+ `android/app/build.gradle.kts`（`versionName` 同步、`versionCode` 递增 1）+ `server/package.json`（信令服务）。先跑 `node scripts/release.mjs` 做一致性检查与引导。
-2. **本地预检**：改过配置/图标先 `npm run build:assets` 重新生成安卓离线资源；语法错误先本地跑一遍（`npm run dist:win` 或等 CI 报错兜底）。
-3. **打标签触发**：`git tag v<版本>`（如 `v0.1.7`）→ `git push origin v<版本>`。push 成功即视为发包开始，CI 自动跑三个打包 job + publish job。
-4. **跟踪核验**：等 CI 全绿后，打开 GitHub Releases 页确认三端产物齐全（APK、两个 exe、tar.gz）；缺哪个产物视为发包失败，如实报告。
-5. **失败处理**：CI 红叉 → 定位失败 job → 修复后 `git tag -d v<版本>` + `git push origin :refs/tags/v<版本>` 删掉坏标签 → 重新 `git push origin v<版本>`（publish job 用 `--clobber` 覆盖同名 Release）。已知坑：publish job 未 checkout 仓库时 `gh release` 需要 `GH_REPO: ${{ github.repository }}` 环境变量，否则报 not a git repository（v0.1.7 实证）。
-6. **测试期产物**（未正式发布、真机验证用）按 mini-vault skill 走中转站 get.xgwnje.cn，问过 owner 才传；正式发包只走 GitHub Releases。
+1. **写 CHANGELOG 当前版本节**（硬门槛，doc-structure 归口）：`CHANGELOG.md` 顶部新增 `## v<版本>` 节，固定三类 `### 新增`/`### 修复`/`### 变更`——CI publish 机械提取该节作为 Release 更新说明，**缺节直接失败**。本地预检：`python D:/ObjectCode/HarnessOS/scripts/check_docs.py --readme README.md --changelog CHANGELOG.md --version <版本>`。
+2. **版本号三处同步**（不一致一律不许发包）：`package.json`（主程序）+ `android/app/build.gradle.kts`（`versionName` 同步、`versionCode` 递增 1）+ `server/package.json`（信令服务）。先跑 `node scripts/release.mjs` 做一致性检查与引导。
+4. **打标签触发**：`git tag v<版本>`（如 `v0.1.7`）→ `git push origin v<版本>`。push 成功即视为发包开始，CI 自动跑三个打包 job + publish job。
+5. **跟踪核验**：等 CI 全绿后，打开 GitHub Releases 页确认三端产物齐全（APK、两个 exe、tar.gz）；缺哪个产物视为发包失败，如实报告。
+6. **失败处理**：CI 红叉 → 定位失败 job → 修复后 `git tag -d v<版本>` + `git push origin :refs/tags/v<版本>` 删掉坏标签 → 重新 `git push origin v<版本>`（publish job 用 `--clobber` 覆盖同名 Release）。已知坑：publish job `gh release` 需要 `GH_REPO: ${{ github.repository }}` 环境变量，否则报 not a git repository（v0.1.7 实证）；CHANGELOG 缺版本节 publish 直接 fail（设计如此，补上节重推标签即可）。
+7. **测试期产物**（未正式发布、真机验证用）按 mini-vault skill 走中转站 get.xgwnje.cn，问过 owner 才传；正式发包只走 GitHub Releases。
 
 ## 最小验证矩阵
 
@@ -72,6 +72,7 @@ Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上�
 - `README.md`：面向人——项目定位、使用方式（含 P2P 远程说明）。
 - `AGENTS.md`：面向 Agent——项目铁律、命令、验证要求。
 - `docs/roadmap.md`：产品路线——定位、自定义能力边界（声明式 vs 编程）、场景预设包、版本排期（2026-08-06 定案）。
+- `CHANGELOG.md`：加工历史 + 发版文案事实来源（CI publish 提取当前版本节作 Release 更新说明）。
 - `docs/touchdeck-notes.md`：知识沉淀——踩坑实证、布局/皮肤规范、交互手势细节（AGENTS.md 的细节索引指向此处）。
 - `touchdeck.config.json`：按钮与 UI 参数事实来源。
 
