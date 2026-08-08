@@ -5,6 +5,8 @@ import { clipboard } from "electron";
 import { resolveConfig, matchTarget, type KeyCombo, type PanelButton } from "../shared/config-resolve";
 import { wins, fgCache } from "./state";
 import { currentEffective } from "./foreground";
+import { inspectForeground } from "./foreground";
+import { type ActionResult, actionResult } from "../shared/action-protocol";
 
 // nut-js 是 ESM 包，用动态 import 按需加载（避免拖慢启动）
 let nutKeyboard: any = null;
@@ -54,7 +56,8 @@ async function sendKeys(keys: KeyCombo): Promise<void> {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const actionQueue: { btn: PanelButton; source: string }[] = [];
+interface QueuedAction { btn: PanelButton; source: string; requestId?: string; onResult?: (result: ActionResult) => void; }
+const actionQueue: QueuedAction[] = [];
 let actionRunning = false;
 const ACTION_QUEUE_MAX = 16;
 
@@ -96,6 +99,15 @@ export interface ActionFeedback {
   id: string; ok: boolean; reason?: string; source: string; blocked?: boolean;
 }
 
+export interface EnqueueOptions {
+  requestId?: string;
+  onResult?: (result: ActionResult) => void;
+}
+
+function reportRemote(options: EnqueueOptions, status: ActionResult["status"], reason?: string): void {
+  if (options.requestId) options.onResult?.(actionResult(options.requestId, status, reason));
+}
+
 // 动作反馈统一通道：控制台可见（拦截/失败 toast），同时写主进程日志
 function actionFeedback(fb: ActionFeedback): void {
   console.log("[touchdeck] action", JSON.stringify(fb));
@@ -109,23 +121,28 @@ function actionFeedback(fb: ActionFeedback): void {
 }
 
 // 入队即完成同步校验（未配置/target 拦截），通过则排队串行执行
-export function enqueueAction(buttonId: string, source: string): { ok: boolean; reason?: string; queued?: boolean } {
+export function enqueueAction(buttonId: string, source: string, options: EnqueueOptions = {}): { ok: boolean; reason?: string; queued?: boolean } {
   const { buttons } = currentEffective();
   const btn = buttons.find((b) => b.id === buttonId);
   if (!btn) {
     actionFeedback({ id: buttonId, ok: false, reason: "unconfigured", source });
+    reportRemote(options, "failed", "unknown-button");
     return { ok: false, reason: "unconfigured" };
   }
-  if (btn.target && !matchTarget(btn.target, fgCache)) {
-    const reason = `目标不匹配：前台是 ${fgCache.process || "未知"}`;
+  const currentForeground = btn.target ? inspectForeground() : fgCache;
+  if (btn.target && !matchTarget(btn.target, currentForeground)) {
+    const reason = `目标不匹配或前台探测失败：${currentForeground?.process || "未知"}`;
     actionFeedback({ id: buttonId, ok: false, reason, source, blocked: true });
+    reportRemote(options, "blocked", "target-unavailable");
     return { ok: false, reason: "target-mismatch" };
   }
   if (actionQueue.length >= ACTION_QUEUE_MAX) {
     actionFeedback({ id: buttonId, ok: false, reason: "队列溢出丢弃", source });
+    reportRemote(options, "failed", "queue-full");
     return { ok: false, reason: "queue-full" };
   }
-  actionQueue.push({ btn, source });
+  actionQueue.push({ btn, source, requestId: options.requestId, onResult: options.onResult });
+  reportRemote(options, "queued");
   pumpActions();
   return { ok: true, queued: true };
 }
@@ -134,13 +151,23 @@ async function pumpActions(): Promise<void> {
   if (actionRunning) return;
   actionRunning = true;
   while (actionQueue.length) {
-    const { btn, source } = actionQueue.shift()!;
+    const { btn, source, requestId, onResult } = actionQueue.shift()!;
     try {
+      // 排队期间焦点可能已变；真正注入前再做一次实时校验。
+      const currentForeground = btn.target ? inspectForeground() : fgCache;
+      if (btn.target && !matchTarget(btn.target, currentForeground)) {
+        const reason = `目标不匹配或前台探测失败：${currentForeground?.process || "未知"}`;
+        actionFeedback({ id: btn.id, ok: false, reason, source, blocked: true });
+        if (requestId) onResult?.(actionResult(requestId, "blocked", "target-changed"));
+        continue;
+      }
       await runMacro(btn);
       actionFeedback({ id: btn.id, ok: true, source });
+      if (requestId) onResult?.(actionResult(requestId, "executed"));
     } catch (err: any) {
       // 某步抛错：中止当前宏（剩余步骤不执行），队列继续
       actionFeedback({ id: btn.id, ok: false, reason: String((err && err.message) || err), source });
+      if (requestId) onResult?.(actionResult(requestId, "failed", "execution-error"));
     }
   }
   actionRunning = false;

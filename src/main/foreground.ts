@@ -12,10 +12,21 @@ import {
 } from "./win32";
 
 export function pollForeground(): void {
+  const fg = inspectForeground();
+  if (!fg) return;
+  if (fgCache.process !== fg.process || fgCache.title !== fg.title) {
+    Object.assign(fgCache, fg);
+    console.log("[touchdeck] 前台变化:", fg.process, "|", fg.title.slice(0, 40));
+    onForegroundChange();
+  }
+}
+
+// 注入前使用实时探测，不能让一次探测异常沿用旧缓存而误打进别的窗口。
+export function inspectForeground(): { pid: number; process: string; title: string } | null {
   try {
     ensureWin32();
     const hwnd = GetForegroundWindow();
-    if (!hwnd) return;
+    if (!hwnd) return null;
     const tbuf = new Uint16Array(512);
     const tn = GetWindowTextW(hwnd, tbuf, tbuf.length);
     const title = String.fromCharCode(...tbuf.slice(0, tn));
@@ -32,13 +43,12 @@ export function pollForeground(): void {
       }
       CloseHandle(h);
     }
-    if (fgCache.process !== process || fgCache.title !== title) {
-      Object.assign(fgCache, { pid, process, title });
-      console.log("[touchdeck] 前台变化:", process, "|", title.slice(0, 40));
-      onForegroundChange();
-    }
+    // 无法取得进程名也不能作为带 target 的安全依据。
+    if (!process) return null;
+    return { pid, process, title };
   } catch (e: any) {
     console.error("[touchdeck] 前台探测失败:", e.message);
+    return null;
   }
 }
 

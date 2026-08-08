@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 import { ROOT, wins, peerStatusBox } from "./state";
 import { enqueueAction } from "./macro";
 import { broadcastButtons } from "./foreground";
+import { RequestLedger, actionResult, parseActionRequest, type ActionResult } from "../shared/action-protocol";
+
+const requestLedger = new RequestLedger();
+
+function sendResult(clientId: string, result: ActionResult): void {
+  if (wins.peer && !wins.peer.isDestroyed()) wins.peer.webContents.send("peer-action-result", { clientId, result });
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
@@ -47,9 +54,18 @@ export function registerPeerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle("peer-status-get", () => peerStatusBox.value);
-  ipcMain.on("peer-press", (_e, buttonId) => {
-    const r = enqueueAction(buttonId, "peer");
-    if (r.ok) console.log("[touchdeck] peer press", buttonId);
+  ipcMain.on("peer-action", (_e, clientId: unknown, raw: unknown) => {
+    if (typeof clientId !== "string") return;
+    const request = parseActionRequest(raw);
+    if (!request) return;
+    const prior = requestLedger.get(clientId, request.requestId);
+    if (prior) return sendResult(clientId, prior);
+    const report = (result: ActionResult) => {
+      requestLedger.record(clientId, result);
+      sendResult(clientId, result);
+    };
+    const r = enqueueAction(request.buttonId, "peer", { requestId: request.requestId, onResult: report });
+    if (r.ok) console.log("[touchdeck] peer action", request.requestId, request.buttonId);
   });
   // 设备通道上线：把当前有效按钮集推下去（安卓动态渲染；离线 panel.json 仅兜底）
   ipcMain.on("peer-channel-open", () => broadcastButtons());

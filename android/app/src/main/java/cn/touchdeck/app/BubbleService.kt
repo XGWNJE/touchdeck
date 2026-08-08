@@ -74,6 +74,20 @@ class BubbleService : Service() {
         bubbleSize = dp(52)
         startForegroundWithNotification()
         showBubble()
+        P2PState.actionListener = { result ->
+            bubbleView?.post {
+                val text = when (result.status) {
+                    "queued" -> "正在执行…"
+                    "executed" -> "已执行"
+                    "blocked" -> "已拦截：目标不匹配"
+                    "failed" -> "执行失败"
+                    "disconnected" -> "连接已断开"
+                    "timeout" -> "执行超时"
+                    else -> "动作状态未知"
+                }
+                flashLabel(text)
+            }
+        }
     }
 
     /** 屏幕尺寸现用现取：旋转后旧值会让球被夹死在旧范围、菜单中心与可用半径全算错（v0.3.0 实证） */
@@ -97,6 +111,7 @@ class BubbleService : Service() {
         removePanel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
+        P2PState.actionListener = null
         super.onDestroy()
     }
 
@@ -462,11 +477,9 @@ class BubbleService : Service() {
      * 按键注入在 Windows 端完成，本地只负责 UI 与手势。
      */
     private fun pressServer(id: String, label: String) {
-        flashLabel("发送：$label")
-        if (P2PState.send(id)) {
-            flashLabel("已发送：$label")
-        } else {
-            flashLabel("P2P 未连接")
+        when (P2PState.send(id)) {
+            SendOutcome.QUEUED -> flashLabel("等待执行：$label")
+            SendOutcome.DISCONNECTED -> flashLabel("P2P 未连接")
         }
     }
 

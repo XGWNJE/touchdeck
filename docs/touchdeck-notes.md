@@ -2,17 +2,32 @@
 
 > 本文件只记录已验证的实现事实、踩坑和当前缺口。产品路线以 `docs/roadmap.md` 为准，操作规则以 `AGENTS.md` 为准。
 
-## 当前可靠性缺口
+## v0.2.2 当前实现与剩余验证
 
 以下是实现现状，不是已完成能力：
 
-- Android 当前发送 `{id}`，Windows 收到后只进入本地 FIFO 队列，没有 `requestId` 和远程 ACK。
-- Android 的“已发送”只代表 DataChannel `send()` 调用成功，不能代表动作已执行。
-- Windows 执行反馈目前只发给控制台，未定向回到原 Android 设备。
-- `target` 当前在入队时检查，真正注入前还需要再次检查。
-- 前台探测异常时当前缓存可能保留旧窗口，必须在可靠性闭环中引入明确的失效语义。
-- 当前没有可靠性自动化测试，也没有 `test`/`lint` npm 脚本。
+- Android 使用 `v: 1`、`type: "action"`、UUID `requestId` 和 `buttonId` 发起远程动作；Host 返回定向 `action-result`。
+- Host 对同一 `(clientId, requestId)` 保存有限幂等记录；重复包不会第二次进入宏队列，只返回已知状态。
+- Android 在 ACK 超时后以同一 `requestId` 重试一次，随后显示 `timeout`；迟到 ACK 不得覆盖已显示的终态。
+- Windows 在入队和实际注入前都实时探测前台；带 `target` 的按钮探测失败或不匹配均返回 `blocked`。
+- `npm test` 已覆盖协议格式、非法消息和按客户端隔离的幂等记录；尚未完成双端连接下的 100 次人工连续操作和真机反馈目检。
 - `confirm` 字段已经在部分配置和传输代码中流转，但菜单端尚未形成完整的确认交互；可靠性闭环前不得继续扩展该能力。
+
+### 本轮验证记录（2026-08-09）
+
+已验证：
+
+- `npm test`、`npm run typecheck`、`npm run build` 和 Android Debug 构建均通过。
+- Windows Host 与 Android 模拟器真实 P2P 直连；DataChannel 已打开，Host 向 Android 下发 14 个按钮。
+- Android 悬浮球触发 `esc` 后生成 UUID `requestId`，收到定向 ACK 后显示“已执行”；这证明 `executed` 不再等同于 DataChannel `send()` 成功。
+- 强制结束 Host 后，Android 从“已直连”切换为“主机断线，等待恢复…”，日志出现 `host gone` 及 DataChannel `CLOSING` / `CLOSED`；不得继续显示连接健康。
+
+未验证，后续若出现异常优先从这些路径排查：
+
+- 动作已经入队、但 ACK 前 DataChannel 断开时，Android 是否只显示 `disconnected` 或 `timeout`，绝不显示 `executed`。
+- Android 的同一 `requestId` 超时重试在真实 DataChannel 上是否只触发一次 Windows 宏；当前仅有协议层幂等测试。
+- 带 `target` 的按钮在目标不匹配和前台探测失败时的双重拦截；默认配置没有带 `target` 的测试按钮，未临时改写用户配置。
+- 双 Client 下 ACK 是否严格只回原设备，以及 100 次连续关键动作的成功率、可追踪性和错误窗口注入数。
 
 ## Windows 悬浮球
 

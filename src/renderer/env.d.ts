@@ -22,7 +22,7 @@ export interface TouchdeckApi {
   onPeerStart(cb: (url: string | null) => void): void;
   onPeerStop(cb: () => void): void;
   peerStatus(s: unknown): void;
-  peerPress(id: string): void;
+  peerAction(clientId: string, payload: unknown): void;
   onPeerStatus(cb: (s: any) => void): void;
   onPanelStatus(cb: (s: { panelRunning: boolean; panelDisabled: boolean }) => void): void;
   onPeerPressFailed(cb: (id: string) => void): void;
@@ -31,6 +31,7 @@ export interface TouchdeckApi {
   onConfigReloaded(cb: (s: { errors: string[] }) => void): void;
   onPeerBroadcast(cb: (payload: any) => void): void;
   peerChannelOpen(): void;
+  onPeerActionResult(cb: (payload: any) => void): void;
 }
 
 declare global {

@@ -19,6 +19,8 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * host 下发的动态按钮（DataChannel "buttons" 消息，连接建立与场景切换时推送）。
@@ -34,6 +36,9 @@ data class PanelButton(
     val aux: Boolean
 )
 
+data class RemoteActionResult(val requestId: String, val status: String, val reason: String)
+enum class SendOutcome { QUEUED, DISCONNECTED }
+
 /**
  * P2P 全局状态：MainActivity 控制连接，BubbleService 按键时读取。
  * 线程：信令回调在 WebSocket 线程，状态更新走主线程（listener 内 runOnUiThread 由调用方处理）。
@@ -48,6 +53,7 @@ object P2PState {
     @Volatile
     var roomCode: String = ""
     var listener: ((String) -> Unit)? = null
+    var actionListener: ((RemoteActionResult) -> Unit)? = null
 
     // host 下发的动态按钮集（数组顺序即排布顺序，aux 常驻键在前）；null = 用离线 panel.json
     @Volatile
@@ -82,7 +88,7 @@ object P2PState {
         client?.reconnectNow()
     }
 
-    fun send(id: String): Boolean = client?.send(id) ?: false
+    fun send(id: String): SendOutcome = client?.send(id) ?: SendOutcome.DISCONNECTED
 }
 
 /**
@@ -134,6 +140,8 @@ class P2PClient(
     private var pingFuture: ScheduledFuture<*>? = null
     private var watchdogFuture: ScheduledFuture<*>? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private data class PendingAction(val buttonId: String, var attempts: Int = 0)
+    private val pendingActions = ConcurrentHashMap<String, PendingAction>()
 
     fun start() {
         closed = false
@@ -405,6 +413,7 @@ class P2PClient(
                 } else if (dc.state() == DataChannel.State.CLOSED) {
                     channelOpen = false
                     stopHeartbeat()
+                    finishAllPending("disconnected", "channel-closed")
                     if (!closed) scheduleReconnect()
                 }
             }
@@ -419,6 +428,17 @@ class P2PClient(
                     if (msg.optString("type") == "buttons") {
                         P2PState.dynamicButtons = parsePanelButtons(msg.optJSONArray("buttons"))
                         Log.d(TAG, "buttons received: ${P2PState.dynamicButtons?.size ?: 0}")
+                    }
+                    if (msg.optString("type") == "action-result") {
+                        val requestId = msg.optString("requestId")
+                        val status = msg.optString("status")
+                        if (requestId.isNotEmpty() && status in setOf("queued", "executed", "blocked", "failed")) {
+                            // 超时后的迟到 ACK 不得把「超时」翻成「已执行」；用户只能看到同一请求的单一终态。
+                            val pending = pendingActions[requestId]
+                            if (pending != null && (status == "queued" || pendingActions.remove(requestId) != null)) {
+                                P2PState.actionListener?.invoke(RemoteActionResult(requestId, status, msg.optString("reason")))
+                            }
+                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -502,14 +522,44 @@ class P2PClient(
         return list
     }
 
-    /** 发送按键；通道未开返回 false（BubbleService 据此闪「P2P 未连接」） */
-    fun send(id: String): Boolean {
-        val ch = channel ?: run { Log.d(TAG, "send($id): channel null"); return false }
-        if (ch.state() != DataChannel.State.OPEN) { Log.d(TAG, "send($id): state=" + ch.state()); return false }
-        val json = JSONObject().put("id", id).toString()
-        ch.send(DataChannel.Buffer(ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false))
-        Log.d(TAG, "send($id): ok")
-        return true
+    /** 发送版本化动作；超时先用同一 requestId 重试一次，Host 幂等保证绝不重复执行。 */
+    fun send(id: String): SendOutcome {
+        val requestId = UUID.randomUUID().toString()
+        val pending = PendingAction(id)
+        if (!sendPending(requestId, pending)) return SendOutcome.DISCONNECTED
+        pendingActions[requestId] = pending
+        exec.schedule({ checkActionTimeout(requestId) }, 4000, TimeUnit.MILLISECONDS)
+        Log.d(TAG, "action queued requestId=$requestId buttonId=$id")
+        return SendOutcome.QUEUED
+    }
+
+    private fun sendPending(requestId: String, pending: PendingAction): Boolean {
+        val ch = channel ?: return false
+        if (ch.state() != DataChannel.State.OPEN) return false
+        val json = JSONObject().put("v", 1).put("type", "action")
+            .put("requestId", requestId).put("buttonId", pending.buttonId).toString()
+        return try { ch.send(DataChannel.Buffer(ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) } catch (_: Exception) { false }
+    }
+
+    private fun checkActionTimeout(requestId: String) {
+        val pending = pendingActions[requestId] ?: return
+        if (pending.attempts == 0 && sendPending(requestId, pending)) {
+            pending.attempts++
+            exec.schedule({ checkActionTimeout(requestId) }, 4000, TimeUnit.MILLISECONDS)
+            return
+        }
+        if (pendingActions.remove(requestId) != null) {
+            P2PState.actionListener?.invoke(RemoteActionResult(requestId, "timeout", "ack-timeout"))
+        }
+    }
+
+    private fun finishAllPending(status: String, reason: String) {
+        val ids = pendingActions.keys.toList()
+        for (requestId in ids) {
+            if (pendingActions.remove(requestId) != null) {
+                P2PState.actionListener?.invoke(RemoteActionResult(requestId, status, reason))
+            }
+        }
     }
 
     // ===== 清理 =====
@@ -517,6 +567,7 @@ class P2PClient(
     private fun closePeer() {
         stopHeartbeat()
         channelOpen = false
+        finishAllPending("disconnected", "peer-closed")
         try { channel?.close() } catch (_: Exception) {}
         try { channel?.dispose() } catch (_: Exception) {}
         try { pc?.close() } catch (_: Exception) {}

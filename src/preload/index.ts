@@ -28,7 +28,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   onPeerStart: (cb: (url: string | null) => void) => ipcRenderer.on("peer-start", (_e: IpcRendererEvent, url: string | null) => cb(url)),
   onPeerStop: (cb: () => void) => ipcRenderer.on("peer-stop", () => cb()),
   peerStatus: (s: unknown) => ipcRenderer.send("peer-status", s),
-  peerPress: (id: string) => ipcRenderer.send("peer-press", id),
+  peerAction: (clientId: string, payload: unknown) => ipcRenderer.send("peer-action", clientId, payload),
   onPeerStatus: (cb: (s: any) => void) => ipcRenderer.on("peer-status", (_e: IpcRendererEvent, s: any) => cb(s)),
   onPanelStatus: (cb: (s: any) => void) => ipcRenderer.on("panel-status", (_e: IpcRendererEvent, s: any) => cb(s)),
   onPeerPressFailed: (cb: (id: string) => void) => ipcRenderer.on("peer-press-failed", (_e: IpcRendererEvent, id: string) => cb(id)),
@@ -40,4 +40,5 @@ contextBridge.exposeInMainWorld("touchdeck", {
   // host→client 按钮集推送：主进程转发给 peer，经 DataChannel 广播
   onPeerBroadcast: (cb: (payload: any) => void) => ipcRenderer.on("peer-broadcast", (_e: IpcRendererEvent, payload: any) => cb(payload)),
   peerChannelOpen: () => ipcRenderer.send("peer-channel-open"),
+  onPeerActionResult: (cb: (payload: any) => void) => ipcRenderer.on("peer-action-result", (_e: IpcRendererEvent, payload: any) => cb(payload)),
 });

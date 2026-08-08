@@ -1,6 +1,7 @@
 // P2P 中继（隐藏窗口）：Windows 端 = 房间 host。
 // 连接信令 → 建/回房间（控制台显示房间码）→ 等 client（安卓）加入 →
-// client 创建 DataChannel → 收到按键消息 {id} → IPC 主进程本地注入。
+// client 创建 DataChannel → 收到版本化动作消息 → IPC 主进程执行 → 定向 ACK 回原 client。
+import { actionResult, parseActionRequest, type ActionResult } from "../../shared/action-protocol";
 // 打洞失败（对称 NAT）由 TURN 兜底；所有信令/媒体经 DTLS 加密。
 //
 // 健壮性（2026-08-05）：
@@ -177,10 +178,22 @@ function bindChannel(clientId: string, p: Peer): void {
         p.channel!.send(JSON.stringify({ pong: msg.ping }));
         return;
       }
-      console.log("peer msg:", JSON.stringify(msg));
-      if (msg && msg.id) window.touchdeck.peerPress(msg.id);
+      const request = parseActionRequest(msg);
+      if (request) {
+        window.touchdeck.peerAction(clientId, request);
+      } else if (msg && msg.type === "action") {
+        // 格式错误也要明确回执，避免 Android 一直等到超时。
+        const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+        if (requestId) sendActionResult(clientId, actionResult(requestId, "failed", "invalid-message"));
+      }
     } catch { /* 非 JSON 忽略 */ }
   };
+}
+
+function sendActionResult(clientId: string, result: ActionResult): void {
+  const peer = peers.get(clientId);
+  if (!peer || !peer.channel || peer.channel.readyState !== "open") return;
+  try { peer.channel.send(JSON.stringify(result)); } catch { /* 对端已断开，由其超时处理 */ }
 }
 
 // 半开通道巡检：通道还 open 但 25s 无任何消息（WiFi 切网僵死等），拆掉等重连
@@ -252,6 +265,12 @@ window.touchdeck.onPeerBroadcast((payload) => {
       try { p.channel.send(data); } catch { /* 单设备失败不阻塞其他设备 */ }
     }
   }
+});
+
+// 主进程只把 ACK 路由到发起动作的 clientId，禁止向所有设备广播执行结果。
+window.touchdeck.onPeerActionResult((payload) => {
+  if (!payload || typeof payload.clientId !== "string" || !payload.result) return;
+  sendActionResult(payload.clientId, payload.result as ActionResult);
 });
 
 // 调试句柄（原型期）：模块作用域不污染 window，CDP 排障走这里读链路状态
