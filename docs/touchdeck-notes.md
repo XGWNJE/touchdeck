@@ -10,7 +10,7 @@
 - Host 对同一 `(clientId, requestId)` 保存有限幂等记录；重复包不会第二次进入宏队列，只返回已知状态。
 - Android 在 ACK 超时后以同一 `requestId` 重试一次，随后显示 `timeout`；迟到 ACK 不得覆盖已显示的终态。
 - Windows 在入队和实际注入前都实时探测前台；带 `target` 的按钮探测失败或不匹配均返回 `blocked`。
-- `npm test` 已覆盖协议格式、非法消息和按客户端隔离的幂等记录；尚未完成双端连接下的 100 次人工连续操作和真机反馈目检。
+- `npm test` 已覆盖协议格式、非法消息、按客户端隔离的幂等记录、目标匹配/失配/探测失败、无效目标正则，以及宏 FIFO 的串行、排队后二次拦截、队列溢出和执行异常。
 - `confirm` 字段已经在部分配置和传输代码中流转，但菜单端尚未形成完整的确认交互；可靠性闭环前不得继续扩展该能力。
 
 ### 本轮验证记录（2026-08-09）
@@ -21,13 +21,18 @@
 - Windows Host 与 Android 模拟器真实 P2P 直连；DataChannel 已打开，Host 向 Android 下发 14 个按钮。
 - Android 悬浮球触发 `esc` 后生成 UUID `requestId`，收到定向 ACK 后显示“已执行”；这证明 `executed` 不再等同于 DataChannel `send()` 成功。
 - 强制结束 Host 后，Android 从“已直连”切换为“主机断线，等待恢复…”，日志出现 `host gone` 及 DataChannel `CLOSING` / `CLOSED`；不得继续显示连接健康。
+- Debug APK 的受控测试入口让同一 `requestId` 连发两次；Android 收到两次 `queued`，而 Windows 临时靶记事本只输入一次 `/`，真实链路的去重已验证。
+- 动作处于 `queued` 时强制结束 Host：Android 没有收到 `executed`，并立刻记录 `disconnected / host-gone`。此前它会在约 8 秒后误报 `timeout`，已修正。
+- 第二台模拟器 `TouchDeck_QA_2` 已加入同一房间：仅发起设备收到自己的 `executed`，另一台没有该 `requestId`，定向 ACK 已验证。
+- 在临时记事本前台、400ms 间隔下连续发出 100 个不同 `requestId`：靶窗口得到 100 个 `/`，Android 收到 100 个 `executed`，失败终态为 0（成功率 100%）。
+- 无节流突发 100 个不同请求时，30 个执行、70 个明确 `failed`（队列上限保护）；没有静默丢失或重复执行。这不是连续成功率样本。
+- Owner 已在真机完成触感、等待至终态反馈和“不抢 Windows 焦点”的目检，结果均通过。
 
 未验证，后续若出现异常优先从这些路径排查：
 
-- 动作已经入队、但 ACK 前 DataChannel 断开时，Android 是否只显示 `disconnected` 或 `timeout`，绝不显示 `executed`。
-- Android 的同一 `requestId` 超时重试在真实 DataChannel 上是否只触发一次 Windows 宏；当前仅有协议层幂等测试。
-- 带 `target` 的按钮在目标不匹配和前台探测失败时的双重拦截；默认配置没有带 `target` 的测试按钮，未临时改写用户配置。
-- 双 Client 下 ACK 是否严格只回原设备，以及 100 次连续关键动作的成功率、可追踪性和错误窗口注入数。
+- Android 自动“超时后重发同一 `requestId`”在真实 DataChannel 上是否只触发一次 Windows 宏；当前已验证受控重复包，不等同于 Android 超时重试路径。
+- 带 `target` 的按钮在目标不匹配和前台探测失败时的真实双重拦截；默认配置没有带 `target` 的测试按钮，未临时改写用户配置。自动测试已覆盖安全判断。
+- 真机对 `blocked`、`failed` 与 `timeout` 三种终态的逐项触感与文案复核；本轮真机已确认日常成功、等待、断线和焦点行为。
 
 ## Windows 悬浮球
 

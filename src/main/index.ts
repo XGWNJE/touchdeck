@@ -8,7 +8,7 @@ import { ROOT, wins } from "./state";
 import { setExternalConfigDir } from "../shared/config-resolve";
 import { registerCommonIpc, registerConsoleIpc } from "./ipc";
 import { registerDragIpc } from "./drag";
-import { registerPeerIpc } from "./peer-host";
+import { registerPeerIpc, startPeer } from "./peer-host";
 import { registerConfigWatch } from "./hotreload";
 import { pollForeground } from "./foreground";
 import {
@@ -54,6 +54,8 @@ app.whenReady().then(() => {
   registerConsoleIpc();
   registerDragIpc();
   registerPeerIpc();
+  // 仅用于本机自动化验收；正式运行没有该环境变量，不改变用户的手动开启方式。
+  if (process.env.TOUCHDECK_E2E_P2P === "1") startPeer();
   registerMenuIpc();
   createConsoleWindow();
   createTray();

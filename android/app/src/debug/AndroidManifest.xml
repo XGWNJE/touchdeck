@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- 仅合并到 Debug APK；用于真实 DataChannel 的重复 requestId 验收。 -->
+        <receiver
+            android:name=".DebugActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="cn.touchdeck.app.DEBUG_ACTION" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -89,6 +89,10 @@ object P2PState {
     }
 
     fun send(id: String): SendOutcome = client?.send(id) ?: SendOutcome.DISCONNECTED
+
+    // 只由 debug source-set 的 ADB 测试接收器调用；Release APK 不注册该接收器。
+    fun sendWithRequestIdForTest(id: String, requestId: String): SendOutcome =
+        client?.sendWithRequestId(id, requestId) ?: SendOutcome.DISCONNECTED
 }
 
 /**
@@ -200,6 +204,9 @@ class P2PClient(
             "host-gone" -> {
                 // host 信令闪断：不自毁 WebRTC（服务端宽限期保留房间），等 host-back
                 Log.d(TAG, "host gone, waiting for reclaim")
+                // 已发出的动作不能继续显示为可等待状态：Host 已不在，无法保证其会执行或回 ACK。
+                // WebRTC 连接本身仍保留，Host reclaim 后可继续使用；仅结束当前这批待确认动作。
+                finishAllPending("disconnected", "host-gone")
                 onState("host-gone")
             }
             "host-back" -> {
@@ -433,6 +440,7 @@ class P2PClient(
                         val requestId = msg.optString("requestId")
                         val status = msg.optString("status")
                         if (requestId.isNotEmpty() && status in setOf("queued", "executed", "blocked", "failed")) {
+                            Log.d(TAG, "action result requestId=$requestId status=$status")
                             // 超时后的迟到 ACK 不得把「超时」翻成「已执行」；用户只能看到同一请求的单一终态。
                             val pending = pendingActions[requestId]
                             if (pending != null && (status == "queued" || pendingActions.remove(requestId) != null)) {
@@ -524,10 +532,25 @@ class P2PClient(
 
     /** 发送版本化动作；超时先用同一 requestId 重试一次，Host 幂等保证绝不重复执行。 */
     fun send(id: String): SendOutcome {
-        val requestId = UUID.randomUUID().toString()
+        return sendWithRequestId(id, UUID.randomUUID().toString())
+    }
+
+    /**
+     * 同一 requestId 的二次调用仅重发同一包，不创建第二个 pending 或第二个超时器。
+     * 该路径同时服务 Android 超时重试和 Debug APK 的幂等验收。
+     */
+    fun sendWithRequestId(id: String, requestId: String): SendOutcome {
+        val existing = pendingActions[requestId]
+        if (existing != null) {
+            return if (sendPending(requestId, existing)) SendOutcome.QUEUED else SendOutcome.DISCONNECTED
+        }
         val pending = PendingAction(id)
-        if (!sendPending(requestId, pending)) return SendOutcome.DISCONNECTED
+        // 先登记再发包：极快 ACK 也能找到 pending，不能被误当成迟到消息丢弃。
         pendingActions[requestId] = pending
+        if (!sendPending(requestId, pending)) {
+            pendingActions.remove(requestId, pending)
+            return SendOutcome.DISCONNECTED
+        }
         exec.schedule({ checkActionTimeout(requestId) }, 4000, TimeUnit.MILLISECONDS)
         Log.d(TAG, "action queued requestId=$requestId buttonId=$id")
         return SendOutcome.QUEUED
@@ -549,6 +572,7 @@ class P2PClient(
             return
         }
         if (pendingActions.remove(requestId) != null) {
+            Log.d(TAG, "action terminal requestId=$requestId status=timeout reason=ack-timeout")
             P2PState.actionListener?.invoke(RemoteActionResult(requestId, "timeout", "ack-timeout"))
         }
     }
@@ -557,6 +581,7 @@ class P2PClient(
         val ids = pendingActions.keys.toList()
         for (requestId in ids) {
             if (pendingActions.remove(requestId) != null) {
+                Log.d(TAG, "action terminal requestId=$requestId status=$status reason=$reason")
                 P2PState.actionListener?.invoke(RemoteActionResult(requestId, status, reason))
             }
         }

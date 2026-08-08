@@ -156,6 +156,15 @@ export function validateButton(btn: unknown, where: string, errors: string[]): P
       errors.push(`${where}(${btn.id}): target 必须是 { process?: 正则, title?: 正则 }`);
       return null;
     }
+    for (const [field, value] of [["process", t.process], ["title", t.title]] as const) {
+      if (value === undefined) continue;
+      try {
+        new RegExp(value, "i");
+      } catch {
+        errors.push(`${where}(${btn.id}): target.${field} 不是有效正则`);
+        return null;
+      }
+    }
   }
   return btn as unknown as PanelButton;
 }
@@ -165,8 +174,12 @@ export function validateButton(btn: unknown, where: string, errors: string[]): P
 export function matchTarget(target: ButtonTarget | undefined | null, fg: ForegroundInfo | null): boolean {
   if (!target) return true;
   if (!fg) return false;
-  if (target.process && !new RegExp(target.process, "i").test(fg.process || "")) return false;
-  if (target.title && !new RegExp(target.title, "i").test(fg.title || "")) return false;
+  try {
+    if (target.process && !new RegExp(target.process, "i").test(fg.process || "")) return false;
+    if (target.title && !new RegExp(target.title, "i").test(fg.title || "")) return false;
+  } catch {
+    return false;
+  }
   return true;
 }
 
