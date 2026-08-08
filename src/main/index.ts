@@ -16,6 +16,9 @@ import {
   startPanel, closeMenuWindow,
 } from "./windows";
 
+// Windows 用稳定的应用 ID 归组任务栏窗口；窗口图标由 BrowserWindow.icon 提供。
+app.setAppUserModelId("cn.touchdeck.app");
+
 // ===== 启动 =====
 // 单实例锁：重复启动直接退出，避免桌面快捷方式连点开出两个面板；
 // 二次启动（快捷方式再点）时把控制台窗口拉回前台

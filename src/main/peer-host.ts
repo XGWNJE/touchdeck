@@ -8,12 +8,14 @@ import { broadcastButtons } from "./foreground";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
+const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.png");
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
 
 function createPeerWindow(): void {
   if (wins.peer && !wins.peer.isDestroyed()) return;
   const peerWin = new BrowserWindow({
     width: 1, height: 1, show: false, frame: false, skipTaskbar: true,
+    icon: APP_ICON,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   });
   wins.peer = peerWin;

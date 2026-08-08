@@ -11,6 +11,7 @@ import { enqueueAction } from "./macro";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
+const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.png");
 // electron-vite dev 模式走 dev server URL；`electron .` 直跑/打包后走 out/renderer 文件
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
 function loadRenderer(win: BrowserWindow, page: string): void {
@@ -40,6 +41,7 @@ function createBubbleWindow(): void {
 
   const bubbleWin = new BrowserWindow({
     width: ballSize, height: ballSize, x, y,
+    icon: APP_ICON,
     frame: false, transparent: true, alwaysOnTop: true,
     focusable: false, skipTaskbar: true, resizable: false, hasShadow: false,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
@@ -68,6 +70,7 @@ function openMenuWindow(): void {
   const b = screen.getPrimaryDisplay().bounds;
   const menuWin = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
+    icon: APP_ICON,
     frame: false, transparent: true, alwaysOnTop: true,
     focusable: false, skipTaskbar: true, resizable: false, hasShadow: false,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
@@ -135,6 +138,7 @@ export function createConsoleWindow(): void {
   const consoleWin = new BrowserWindow({
     width: CONSOLE_WIDTH, height: CONSOLE_HEIGHT,
     title: "TouchDeck 控制台",
+    icon: APP_ICON,
     autoHideMenuBar: true,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   });
@@ -160,7 +164,8 @@ export function createConsoleWindow(): void {
 // 系统托盘：控制台最小化/关闭后驻留，点击恢复；「退出」结束控制台与面板（服务器独立自启不受影响）
 export function createTray(): void {
   try {
-    const tray: Tray = new Tray(nativeImage.createFromPath(path.join(ROOT, "src", "assets", "tray.png")));
+    const trayIcon = nativeImage.createFromPath(path.join(ROOT, "src", "assets", "tray.png"));
+    const tray: Tray = new Tray(trayIcon);
     tray.setToolTip("TouchDeck 控制台");
     const show = () => {
       if (wins.console && !wins.console.isDestroyed()) {
