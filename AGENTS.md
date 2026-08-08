@@ -1,79 +1,137 @@
 # TouchDeck 项目规则
 
-Windows 触控快捷工具栏：跑在被 UU 远程控制的 Windows 本机上，为 8.8 寸平板触屏远程操作提供一键快捷键面板（AI coding 快捷键 + 语音输入触发）。规划跨平台（Mac），技术栈 Electron + TypeScript + React + Tailwind（2026-08-06 起正式版，electron-vite 构建；此前为原生 JS 原型期）。
+## 当前开发主线
+
+TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程操作 Windows 上的 `agent-terminal`**。
+
+当前唯一主线是 v0.2.2「远程触控指令可靠性闭环」：
+
+- 每次远程按键必须有唯一 `requestId`。
+- 请求必须能在 Android、WebRTC、Windows 执行器和日志之间关联。
+- 必须明确返回 `queued`、`executed`、`blocked`、`failed`、`disconnected`、`timeout`。
+- 目标不匹配或前台探测失败时不得注入。
+- 重试不能造成同一宏执行两次。
+- Android 不能把“消息已发送”显示成“动作已执行”。
+
+当前代码仍是旧的 `{id}` 单向消息，可靠性闭环尚未完成。任何文档、配置或新代码不得把它描述成已完成能力。
+
+## 范围锁定
+
+在可靠性闭环和安全配对均达到出口标准前，禁止：
+
+- 新增第二个或第三个场景预设。
+- 开发 GUI 配置编辑器、自由拖拽画布或任意组件系统。
+- 开发插件 API、在线模板市场或配置分享平台。
+- 扩展变量、分支、条件等待、循环判断或脚本语言。
+- 扩展 iOS、macOS、Linux 或通用远控场景。
+- 为视觉丰富进行大型主题系统重构。
+
+现有 `scenarios`、多布局、多主题和宏解析代码是历史基础，不代表当前路线要继续扩张。新增需求必须直接提升“正确执行、明确反馈、快速触达”之一，否则延后并记录到 `docs/roadmap.md` 的决策门槛。
 
 ## 静默观察（harness-observer，常驻职责）
 
-- 若你的系统提示已注入全局协作规则（Claude Code / Codex / OpenCode 会自动注入），其中已含本职责，跳过本节。
-- 否则（如 Kimi Code）：干活全程留意四类信号——owner 重复纠正、owner 明确表达的偏好、可复用踩坑、你自身的语义失败（假设/目标/路径/范围错误）。
-- 命中即静默追加到 `D:\ObjectCode\HarnessOS\notes\inbox\YYYY-MM-DD.md`（先查重，同主题重复计数 +1，脱敏）；记录格式与验收标准以 harness-observer skill 为准，需要时加载它。
-- 静默 = 不打断当前任务、不在对话中提及、不改动当前项目任何文件；只追加 inbox，归并提炼留给 owner 评审。
+- 若系统提示已注入全局协作规则，其中已含本职责，跳过本节。
+- 否则干活全程留意 owner 重复纠正、明确偏好、可复用踩坑和自身语义失败。
+- 命中即静默追加到 `D:\ObjectCode\HarnessOS\notes\inbox\YYYY-MM-DD.md`，先查重、脱敏；格式以 harness-observer skill 为准。
+- 静默观察不得修改本项目文件，不在对话中打断当前任务。
 
-## 中转站真机验证（常驻职责）
+## 铁律
 
-- 若你的系统提示已注入全局协作规则（Claude Code / Codex / OpenCode 会自动注入），其中已含本职责，跳过本节。
-- 否则（如 Kimi Code）：开发内容未外部发版、仍在测试阶段，且发现用户在用模拟器/虚拟机调试验证、未连接真机时，主动询问用户是否把构建产物传到中转站（get.xgwnje.cn），让用户自行安装到真机测试；问过才传，不擅自上传。
+1. 点面板按钮不得抢夺焦点。窗口保持 `focusable: false`，快捷键必须发到操作前的活动窗口。
+2. 按钮和界面参数配置驱动。用户配置入口为 `touchdeck.config.json`，资源来自 `themes/`、`layouts/`、`icons/`；不得把用户按钮写死在业务代码中。
+3. 触控参数适配 8.8 寸平板隔 UU 视频流点按：按钮默认 120px 起步，按下反馈明显且停留至少 400ms，同一按钮 300ms 内不得重复触发。
+4. 远程按键只走 P2P DataChannel。信令服务只做建连和 SDP/ICE 交换，不做按钮转发，不提供 HTTP 回退。
+5. 远程协议必须使用版本化消息和唯一 `requestId`。ACK 必须回到原设备，不能向所有设备广播执行结果。
+6. `executed` 只表示 Windows 宏执行函数真实完成，不得把 DataChannel `send()` 成功当成执行成功。
+7. 带 `target` 的按钮在入队和实际注入前都必须检查；前台探测失败时宁可拦截，不得向未知窗口注入。
+8. 剪贴板宏必须执行前快照、结束后恢复；日志不得记录提示词、剪贴板正文、输入文本或凭据。
 
-## 铁律（不可违反）
+## 关键命令
 
-1. 点面板按钮不得抢夺焦点——快捷键必须发到之前活动的窗口（窗口 `focusable: false`，不得为省事改回）。
-2. 按钮与界面参数全部配置驱动（用户配置 `touchdeck.config.json` + 主题包 `themes/` + 布局包 `layouts/`），按键组合按平台映射，不写死在代码里。
-3. 触控参数必须适配 8.8 寸平板隔 UU 视频流点按：按钮默认 120px 起步；按下反馈须明显且停留 ≥400ms；300ms 内忽略同一按钮重复触发。
+- `npm run dev`：开发运行，打开控制台并按状态启动本机面板。
+- `npm run typecheck`：TypeScript 类型检查。
+- `npm run build`：构建 Electron 产物。
+- `npm start`：运行构建产物。
+- `npm run build:assets`：从配置包生成 Android 离线 `panel.json` 和图标。
+- `npm run dist:win`：构建 Windows setup 与 portable，不发布。
+- `gradlew.bat :app:assembleDebug`：在 `android/` 目录构建 Android Debug APK。
 
-## 关键路径与命令
+当前 `package.json` 没有 `test` 和 `lint` 脚本。可靠性闭环必须补充自动化测试；不得用 `typecheck` 或 `build` 冒充测试通过。
 
-- `npm run dev`（开发，HMR）/ `npm run build` + `npm start`（跑构建产物）：默认打开**控制台窗口**（`src/renderer/console/`：状态总览 + 本机面板启停 + P2P 远程连接启停与房间码复制；「本机」= 运行面板的设备、「远程端」= 手机/平板/浏览器）并自动按配置启动面板；控制台最小化/关闭都进系统托盘（`src/assets/tray.png`，托盘「退出」结束一切）。**远程按键只走 P2P 直连**（2026-08-05 定案）：信令 `wss://api.xgwnje.cn/signal`（VPS touchdeck-signal:8790，nginx 反代）+ TURN 中继 `212.135.41.88:3478`（coturn）；无任何服务器按键转发（旧 server.mjs/frp 链路已彻底删除，frpc 计划任务与 VPS frps 已停）；信令/中继故障时**无 HTTP 回退**，P2P 失败即提示未连接。控制台/面板按需启动（桌面快捷方式 `TouchDeck`），不设开机自启。**本机面板固定悬浮球 + 键鼠交互**（2026-08-05 定案：网格模式与触控滑选手势已移除，`ui.mode`/`ui.input` 配置项废弃；触控滑选归安卓端）。**面板可单独启停**（`console-toggle-panel`，状态持久化 `touchdeck.state.json` 的 `panel` 字段）：只用安卓/平板端时关闭本机面板避免双悬浮球；面板关闭状态下 `startPanel`（含 display-metrics-changed 重建）一律不启动。P2P 健壮性（2026-08-05）：双端断线自动重连（指数退避+上限）+ DataChannel 心跳判半开 + host 闪断房间宽限期/reclaim（房号不变免重配）+ 房间 TTL 到期主动通知控制台。交互/手势/拖球细节见 docs/touchdeck-notes.md。
-- `npm run build:assets`（tsx 直跑 `scripts/build-panel-assets.ts`）：从配置包生成安卓离线资源 `android/app/src/main/assets/panel.json` + `icons/`（配置/图标完全离线，无服务器分发）；改配置后重新生成 + `gradlew assembleDebug` 重装。
-- `android/`：悬浮球 App（Kotlin 薄壳 + 原生径向菜单）。启动时从**离线 assets** 加载 `panel.json` 与图标（无网络依赖）；P2P 连接（MainActivity 高级设置输入房间码 → `P2PState`，`P2PClient.kt` 用 webrtc-sdk 125 + Java-WebSocket 打洞）建立 DataChannel 后，选中按钮经 DataChannel 发送 `{id}`（keys 解析在 Windows 端，App 只发 id）。无服务器配置/图标拉取、无 HTTP 按键回传。一个房间支持 8 台设备同时连（clientId 路由；控制台显示「已直连（N 台设备）」）。安卓坑（MIUI 坐标偏移/Toast 拦截/重装权限重置）与交互手势见 docs/touchdeck-notes.md。
-- `touchdeck.config.json`：用户配置——选择主题/布局 + 行为微调（唯一面向用户的配置入口）+ `auxButtons`（常驻辅助键区，见下）+ `scenarios`（场景绑定，见下）。**配置/布局/主题改动免重启**（2026-08-06 热重载：fs.watch 三源 → 清图标缓存/重建面板/重推安卓按钮集/控制台报配置错误；JSON 改坏沿用上一份有效配置，注入不断）。**打包版配置/状态外置 userData**（v0.2.1：asar 只读，首启播种包内默认配置到 userData，此后读写全走外置；layouts/themes/icons 外置优先、包内兜底，用户可丢自定义包；dev 仍用仓库根）。
-- **按钮动作 = 宏**（2026-08-06）：按钮配 `keys`（单组组合键/文本，视同单步宏）或 `macro` 步骤数组——步骤四型 `keys`/`text`/`paste`/`delay`，可带 `times` 重复；**宏只在 Windows 端解析执行**（App 仍只发 id，铁律不变）。三触发源（本机/菜单/P2P）进全局 FIFO 串行队列，多设备并发不交错；`behavior.macroStepGapMs`（默认 40）控步骤节奏，`behavior.modifierHoldMs`（默认 120）控纯修饰键组合（如语音热键）按住时长；含 `paste` 的宏执行前快照剪贴板、结束后恢复。按钮可带 `target: { process?, title? }`（正则）：前台不匹配时**拦截不注入**并控制台可见反馈；前台探测失败时带 target 的按钮一律拦（宁可拦截不错注）。配置顶层 `scenarios: [{ name, target, layout? }]`：前台命中即整组切换按钮集（本机菜单重排 + DataChannel 推送安卓动态重渲染，离线 panel.json 仅未连接兜底）。`auxButtons`：常驻辅助键（默认语音/中断/发送），跨布局/场景固定，排布占内环起始槽位（菜单/安卓同规则），与布局按钮同 id 去重 aux 优先，标签淡青（#67E8F9）区分。
-- `src/shared/config-resolve.ts`：共享配置解析——主进程 bundle 内联、`scripts/build-panel-assets.ts` tsx 直跑，宏校验/场景解析/aux 合并只此一份。
-- `src/main/`：主进程（TS 模块化）——index（启动装配）/ state（共享状态）/ win32（koffi 函数层）/ macro（宏引擎+队列）/ foreground（前台探测+场景）/ windows（窗口+托盘+Tab）/ drag（拖球）/ peer-host（P2P 中继 IPC）/ hotreload（配置监听）/ ipc（通用 IPC）。构建产物 `out/`（electron-vite）。
-- `src/preload/index.ts`：IPC 契约暴露面（构建为 CJS `.cjs`，沙箱兼容；迁 React 时此面冻结不动）。
-- `src/renderer/bubble/` / `menu/`：悬浮球与全屏径向菜单（React 壳 + canvas 命令式绘制；键鼠：点球或按住 Tab 展开、hover 高亮、左击或松 Tab 确认）。
-- `src/renderer/console/` / `peer/`：控制台 UI（React + Tailwind）；P2P host（隐藏窗口跑 WebRTC，纯 TS 模块）。
-- `themes/<名>/theme.json`：主题皮肤资源包（视觉令牌 + 分组色板）。
-- `layouts/<名>.json`：布局资源包（网格/位置/缩放 + 按钮清单 + 文字显隐）。
-- `icons/<名>.svg`：按钮图标（Lucide 描边风格，currentColor 继承主题色）。
-- `prototype/visual-lab.html`：UI 参数实测页（尺寸/透明度/反馈/布局），双击浏览器打开 F11 全屏用。
+## 代码边界
 
-## 发包（Release，Agent 收到「发包」指令时的唯一流程）
+- `src/shared/config-resolve.ts`：配置、布局、主题、按钮、宏和目标规则的共享解析。
+- `src/main/macro.ts`：Windows 宏执行、FIFO 队列、目标保护和 ACK 状态机的主实现位置。
+- `src/main/foreground.ts`：前台窗口探测和场景解析。注入前不得只依赖过期缓存。
+- `src/main/peer-host.ts`：P2P 消息进入主进程和 ACK 回传路由；必须保留 `clientId`。
+- `src/renderer/peer/main.ts`：Windows Host 的 WebRTC DataChannel 管理，不承担宏执行。
+- `android/.../P2PClient.kt`：Android Client 的信令、DataChannel、请求等待、超时和重连。
+- `android/.../BubbleService.kt`：Android 悬浮球、径向菜单和非颜色反馈。
+- `src/preload/index.ts`：IPC 契约；变更协议时同步更新 `src/renderer/env.d.ts`。
+- `touchdeck.config.json`：当前单一 `agent-terminal` 场景的默认动作事实来源。
+- `layouts/`、`themes/`、`icons/`：当前场景所需资源，不因路线扩张继续增加包数量。
+- `server/signal.mjs`：只负责信令、房间和 TURN 配置；不实现 ACK 和动作执行。
 
-「发包」= 发布三端产物到 GitHub Releases：安卓 APK + Windows 安装包（setup + portable）+ 信令服务包。构建与发布由 GitHub Actions 全自动完成（`.github/workflows/ci.yml`），**push `v*` 标签即触发**，无需也不允许手动改 ci.yml 之外的其他发布通道。
+## 当前 P2P 事实
 
-发包流程（严格按顺序）：
+- 信令地址：`wss://api.xgwnje.cn/signal`。
+- TURN 服务：`212.135.41.88:3478`，由信令服务下发配置。
+- 一个房间目前支持 1 个 Host 和最多 8 个 Client。
+- 信令断线、WebRTC 半开、Host 闪断和房间 TTL 已有重连基础，但这不等于动作可靠性闭环已完成。
+- Android 当前发送 `{id}`；v0.2.2 必须迁移为带版本和 `requestId` 的消息，并提供定向 ACK。
+- 6 位房间码当前不是完整的安全认证方案。安全配对属于 v0.2.3，可靠闭环完成后必须立即处理，不能单独公开发布裸房间码版本。
 
-1. **写 CHANGELOG 当前版本节**（硬门槛，doc-structure 归口）：`CHANGELOG.md` 顶部新增 `## v<版本>` 节，固定三类 `### 新增`/`### 修复`/`### 变更`——CI publish 机械提取该节作为 Release 更新说明，**缺节直接失败**。本地预检：`python D:/ObjectCode/HarnessOS/scripts/check_docs.py --readme README.md --changelog CHANGELOG.md --version <版本>`。
-2. **版本号三处同步**（不一致一律不许发包）：`package.json`（主程序）+ `android/app/build.gradle.kts`（`versionName` 同步、`versionCode` 递增 1）+ `server/package.json`（信令服务）。先跑 `node scripts/release.mjs` 做一致性检查与引导。
-4. **打标签触发**：`git tag v<版本>`（如 `v0.1.7`）→ `git push origin v<版本>`。push 成功即视为发包开始，CI 自动跑三个打包 job + publish job。
-5. **跟踪核验**：等 CI 全绿后，打开 GitHub Releases 页确认三端产物齐全（APK、两个 exe、tar.gz）；缺哪个产物视为发包失败，如实报告。
-6. **失败处理**：CI 红叉 → 定位失败 job → 修复后 `git tag -d v<版本>` + `git push origin :refs/tags/v<版本>` 删掉坏标签 → 重新 `git push origin v<版本>`（publish job 用 `--clobber` 覆盖同名 Release）。已知坑：publish job `gh release` 需要 `GH_REPO: ${{ github.repository }}` 环境变量，否则报 not a git repository（v0.1.7 实证）；CHANGELOG 缺版本节 publish 直接 fail（设计如此，补上节重推标签即可）。
-7. **测试期产物**（未正式发布、真机验证用）按 mini-vault skill 走中转站 get.xgwnje.cn，问过 owner 才传；正式发包只走 GitHub Releases。
+## 配置和打包事实
 
-## 最小验证矩阵
+- 配置、布局、主题改动支持热重载；坏 JSON 沿用上一份有效配置。
+- 打包版配置和状态写入 Electron `userData`，asar 内只读文件不作为运行期写入位置。
+- Android 启动时优先使用离线 assets；P2P 连接后由 Host 推送当前有效按钮集。
+- `keys` 或 `macro` 只在 Windows 端解析执行，Android 只传按钮标识和协议元数据。
+- 本机面板关闭状态必须阻止所有面板窗口启动和重建。
 
-| 变更类型 | 最小验证 |
+## 验证矩阵
+
+| 变更类型 | 必须验证 |
 |---|---|
-| 窗口/焦点行为 | 记事本置前 → 点按钮 → 前台窗口仍是记事本且字符落入 |
-| 按键注入 | 点按钮后目标窗口收到对应字符/组合键（目视或状态栏） |
-| 面板 UI | desktopCapturer 截图目检（普通 GDI 截图抓不到透明分层窗口，勿用） |
-| P2P 链路 | 控制台状态「已直连（N 台设备）」+ 设备按键注入到目标窗口 |
+| 协议/ACK | 自动测试覆盖正常、拦截、失败、超时、断线、重复请求、非法消息和队列溢出 |
+| 目标保护 | 目标匹配、目标不匹配、前台探测失败；错误窗口注入为 0 |
+| 可靠性 | 目标程序中连续 100 次关键动作，成功率至少 99%，每次均可按 `requestId` 定位 |
+| 焦点/注入 | 记事本或专用靶窗置前，点按钮后前台不变且按键落入目标 |
+| Android 反馈 | 等待、成功、拦截、失败、断线、超时均有可读反馈，成功和失败有不同触感 |
+| 面板 UI | 使用 `desktopCapturer` 截图目检；普通 GDI 截不到透明分层窗口，不使用普通截图判断 |
+| P2P | 控制台显示真实连接设备数，指定设备收到自己的 ACK，不向其他设备串反馈 |
+| 回归 | `npm run typecheck`、`npm run build`、Android Debug 构建，以及现有本机面板和旧配置 |
 
-## 已知边界（要点；细节见 docs/touchdeck-notes.md）
+无法在当前环境完成的真机或人工项目必须明确标记“未验证”，不得推测通过。
 
-- UAC 弹窗/锁屏等安全桌面下按键注入无效（Windows 限制），不试图绕过。
-- 窗口移动必须用 Win32 `SetWindowPos`（koffi 直调）；不得用 Electron `setPosition` 高频拖动（透明窗累积缩放伪影）。**SetWindowPos 入参是物理像素，Electron getPosition/getCursorScreenPoint 是逻辑像素**：拖球轮询须按光标所在显示器 scaleFactor 换算，否则缩放 >100% 时拖动偏移。缩放/分辨率变化由 `screen.on("display-metrics-changed")` 防抖 500ms 重建面板校正。
-- UU 触控注入下 pointermove 与 GetAsyncKeyState 均不可靠：不得用移动阈值判拖拽、不得用 GetAsyncKeyState 判松手（拖拽双通道见 docs/）。
-- 页面缩放已锁死（`setVisualZoomLevelLimits(1,1)`），UU 多点触控注入不得引发捏合缩放。
-- 调试代码（截屏 IPC、`prototype/run.log`）属原型期临时物，正式版移除。
+## 已知边界
 
-## 文档地图
+- UAC、锁屏和安全桌面下按键注入受 Windows 限制，不绕过该限制。
+- Win32 `SetWindowPos` 使用物理像素，Electron 和 nut-js 多使用逻辑像素；拖球移动不得混用。
+- UU 触控注入下 `pointermove` 和 `GetAsyncKeyState` 不可靠；拖拽收尾必须遵守已验证的双通道方案。
+- 页面缩放锁定为 1，避免 UU 多点触控触发捏合缩放。
+- Android MIUI 坐标、Toast、通知权限和重装悬浮窗权限问题见 `docs/touchdeck-notes.md`。
 
-- `README.md`：面向人——项目定位、使用方式（含 P2P 远程说明）。
-- `AGENTS.md`：面向 Agent——项目铁律、命令、验证要求。
-- `docs/roadmap.md`：产品路线——定位、自定义能力边界（声明式 vs 编程）、场景预设包、版本排期（2026-08-06 定案）。
-- `CHANGELOG.md`：加工历史 + 发版文案事实来源（CI publish 提取当前版本节作 Release 更新说明）。
-- `docs/touchdeck-notes.md`：知识沉淀——踩坑实证、布局/皮肤规范、交互手势细节（AGENTS.md 的细节索引指向此处）。
-- `touchdeck.config.json`：按钮与 UI 参数事实来源。
+## 发包规则
 
-事实变化时只更新负责该事实的文档。
+收到“发包”指令时才允许发包；未收到不得创建标签、推送或发布。
+
+1. 在 `CHANGELOG.md` 顶部新增当前版本节，固定包含 `新增`、`修复`、`变更`。
+2. 运行 `python D:/ObjectCode/HarnessOS/scripts/check_docs.py --readme README.md --changelog CHANGELOG.md --version <版本>`。
+3. 运行 `node scripts/release.mjs` 检查 `package.json`、Android 和 server 三处版本一致。
+4. 按需运行 `npm run build:assets`，再提交代码并打 `v<版本>` 标签触发 CI。
+5. 等待 CI 全绿，核验 APK、Windows setup、portable 和信令 tar.gz 均存在。
+6. CI 失败时修复根因后删除坏标签并重推；不得绕过 CHANGELOG 检查。
+7. 测试期构建产物上传中转站前必须先征得 owner 同意；正式发包只走 GitHub Releases。
+
+## 文档职责
+
+- `README.md`：面向用户的定位、入口、截图和文档导航，不放操作细节。
+- `AGENTS.md`：Agent 执行规则、范围锁定、命令、验证和边界。
+- `docs/roadmap.md`：唯一产品路线、阶段出口和停止条件。
+- `docs/touchdeck-notes.md`：已验证的实现事实、踩坑和当前缺口。
+- `server/README.md`：信令服务自身的边界和部署事实。
+- `CHANGELOG.md`：已发生的版本历史，不写未实现规划，不改写旧版本。
+- `docs/TouchDeck_产品定位与改进方案_v1.0.docx`：本轮产品方向的原始决策材料，不作为实现状态证明。
+
+事实变化时只更新负责该事实的文档；路线变化先更新 `docs/roadmap.md`，再同步入口文档和 Agent 规则。
