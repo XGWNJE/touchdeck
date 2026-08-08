@@ -25,3 +25,6 @@ android/build-log.txt
 
 # Windows 打包产物（electron-builder）
 dist/
+
+# Electron/Vite 编译输出
+out/
