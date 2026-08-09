@@ -1,39 +1,39 @@
 {
-  "name": "touchdeck",
-  "version": "0.2.1",
-  "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
-  "main": "out/main/index.js",
-  "type": "module",
-  "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts && node --test server/test/**/*.test.mjs",
-    "test:signal": "node --test server/test/**/*.test.mjs",
-    "start": "electron .",
-    "build:assets": "tsx scripts/build-panel-assets.ts",
-    "dist:win": "npm run build && electron-builder --win --publish never"
-  },
-  "author": "XGWNJE",
-  "license": "MIT",
-  "dependencies": {
-    "@nut-tree/nut-js": "^3.1.2",
-    "koffi": "^3.1.4",
-    "lucide-static": "^1.28.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.1.2",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^43.2.0",
-    "electron-builder": "^26.15.3",
-    "electron-vite": "^5.0.0",
-    "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.7",
-    "typescript": "^7.0.2"
-  }
+    "name": "touchdeck",
+    "version": "0.2.3",
+    "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
+    "main": "out/main/index.js",
+    "type": "module",
+    "scripts": {
+        "dev": "electron-vite dev",
+        "build": "electron-vite build",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/**/*.test.ts && node --test server/test/**/*.test.mjs",
+        "test:signal": "node --test server/test/**/*.test.mjs",
+        "start": "electron .",
+        "build:assets": "tsx scripts/build-panel-assets.ts",
+        "dist:win": "npm run build && electron-builder --win --publish never"
+    },
+    "author": "XGWNJE",
+    "license": "MIT",
+    "dependencies": {
+        "@nut-tree/nut-js": "^3.1.2",
+        "koffi": "^3.1.4",
+        "lucide-static": "^1.28.0",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.3.3",
+        "@types/node": "^26.1.2",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.4",
+        "@vitejs/plugin-react": "^5.2.0",
+        "electron": "^43.2.0",
+        "electron-builder": "^26.15.3",
+        "electron-vite": "^5.0.0",
+        "tailwindcss": "^4.3.3",
+        "tsx": "^4.23.7",
+        "typescript": "^7.0.2"
+    }
 }
