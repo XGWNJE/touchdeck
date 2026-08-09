@@ -15,6 +15,9 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -177,6 +180,22 @@ class BubbleService : Service() {
         bubbleParams = params
     }
 
+    /** 长按 350ms 进入拖球模式时震一下：不看屏幕也能明确感知「现在可以移动了」。 */
+    private fun vibrateOnDragStart() {
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            } ?: return@runCatching
+            if (Build.VERSION.SDK_INT >= 26) {
+                vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION") vibrator.vibrate(40)
+            }
+        }
+    }
+
     private inner class BubbleTouchListener(
         private val params: WindowManager.LayoutParams
     ) : View.OnTouchListener {
@@ -205,6 +224,7 @@ class BubbleService : Service() {
                     // 按住不动超 350ms = 进入拖球模式（此时再移动是挪位置，不是滑选）
                     val r = Runnable {
                         holdDragMode = true
+                        vibrateOnDragStart()
                         if (panelExpanded) collapsePanel() // 拖球前收起菜单，防止滞留盖扇区
                     }
                     holdRunnable = r

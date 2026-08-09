@@ -21,6 +21,7 @@ export default function App() {
   const [scene, setScene] = useState("场景 默认");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
   const [p2pBusy, setP2pBusy] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +104,16 @@ export default function App() {
     }
   };
 
+  const copyPairKey = async () => {
+    try {
+      await navigator.clipboard.writeText(p2p.pairingKey || "");
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 1200);
+    } catch {
+      toast("复制失败");
+    }
+  };
+
   // P2P 状态行渲染（与原 HTML 版逐分支一致）
   const p2pActive = P2P_ACTIVE.includes(p2p.phase || "");
   const p2pConnected = p2p.phase === "connected";
@@ -176,7 +187,15 @@ export default function App() {
             <span className={`text-[#4ade80] text-xs flex-none ${copied ? "" : "hidden"}`}>已复制</span>
           </div>
         )}
-        {p2p.pairingKey && <div className="text-[#f0c674] text-xs mt-1">首次配对密钥：<span className="font-mono select-text">{p2p.pairingKey}</span>（5 分钟内仅可使用一次）</div>}
+        {p2p.pairingKey && (
+          <div className="flex items-center gap-2 px-2.5 py-[7px] bg-[#1b1b20] border border-[#33333a] hover:border-[#4a4a55] rounded-lg mb-1.5 cursor-pointer"
+               title="点击复制配对密钥" onClick={copyPairKey}>
+            <span className="text-[#888] text-xs w-16 flex-none">配对密钥</span>
+            <span className="font-mono text-xs text-[#f0c674] break-all flex-1">{p2p.pairingKey}</span>
+            <span className={`text-[#4ade80] text-xs flex-none ${copiedKey ? "" : "hidden"}`}>已复制</span>
+          </div>
+        )}
+        {p2p.pairingKey && <div className="text-[#888] text-xs mb-1.5">首次配对密钥 5 分钟内仅可使用一次，手机输入后即失效。</div>}
         {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
         <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可用续连凭据恢复连接。</div>
       </div>
