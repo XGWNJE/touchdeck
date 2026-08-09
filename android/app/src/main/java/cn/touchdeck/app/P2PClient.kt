@@ -52,6 +52,8 @@ object P2PState {
     var status: String = "idle"          // idle/connecting/ready/connected/reconnecting/host-gone/error/closed
     @Volatile
     var roomCode: String = ""
+    @Volatile
+    var hostFingerprint: String = ""
     var listener: ((String) -> Unit)? = null
     var actionListener: ((RemoteActionResult) -> Unit)? = null
 
@@ -59,11 +61,11 @@ object P2PState {
     @Volatile
     var dynamicButtons: List<PanelButton>? = null
 
-    fun start(signalUrl: String, code: String, onOpen: () -> Unit) {
+    fun start(signalUrl: String, code: String, pairKey: String, deviceKey: String?, onDeviceKey: (String) -> Unit, onHostFingerprint: (String) -> Unit, onOpen: () -> Unit) {
         stop()
         roomCode = code
         val c = P2PClient(
-            signalUrl, code,
+            signalUrl, code, pairKey, deviceKey, onDeviceKey, onHostFingerprint,
             onState = { s ->
                 status = s
                 listener?.invoke(s)
@@ -79,6 +81,7 @@ object P2PState {
         client?.teardown()
         client = null
         status = "idle"
+        hostFingerprint = ""
         dynamicButtons = null // 断开即清空动态按钮集，菜单回落离线 panel.json
         listener?.invoke("idle")
     }
@@ -106,6 +109,10 @@ object P2PState {
 class P2PClient(
     private val signalUrl: String,
     private val roomCode: String,
+    private val pairKey: String,
+    private var deviceKey: String?,
+    private val onDeviceKey: (String) -> Unit,
+    private val onHostFingerprint: (String) -> Unit,
     private val onState: (String) -> Unit,      // connecting/ready/connected/reconnecting/host-gone/error/closed
     private val onChannelOpen: () -> Unit,
     ctx: android.content.Context?
@@ -161,7 +168,9 @@ class P2PClient(
         try {
             ws = object : WebSocketClient(URI(signalUrl.trimEnd('/'))) {
                 override fun onOpen(handshake: ServerHandshake?) {
-                    send(JSONObject().put("type", "join-room").put("code", roomCode).toString())
+                    val join = JSONObject().put("type", "join-room").put("code", roomCode)
+                    if (deviceKey.isNullOrBlank()) join.put("pairKey", pairKey) else join.put("deviceKey", deviceKey)
+                    send(join.toString())
                 }
 
                 override fun onMessage(message: String?) {
@@ -192,6 +201,11 @@ class P2PClient(
     private fun handleSignal(msg: JSONObject) {
         when (msg.optString("type")) {
             "room" -> {
+                msg.optString("deviceKey").takeIf { it.isNotBlank() }?.let { key -> deviceKey = key; onDeviceKey(key) }
+                msg.optString("hostFingerprint").takeIf { it.matches(Regex("[A-F0-9]{16}")) }?.let { value ->
+                    P2PState.hostFingerprint = value
+                    onHostFingerprint(value)
+                }
                 turn = msg.optJSONObject("turn")
                 attempts = 0 // 进房才算连上，重置退避
                 onState("ready")

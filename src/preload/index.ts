@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   peerStart: (signalUrl?: string) => ipcRenderer.invoke("peer-start", signalUrl),
   peerStop: () => ipcRenderer.invoke("peer-stop"),
   peerStatusGet: () => ipcRenderer.invoke("peer-status-get"),
+  peerReady: () => ipcRenderer.send("peer-ready"),
   onPeerStart: (cb: (url: string | null) => void) => ipcRenderer.on("peer-start", (_e: IpcRendererEvent, url: string | null) => cb(url)),
   onPeerStop: (cb: () => void) => ipcRenderer.on("peer-stop", () => cb()),
   peerStatus: (s: unknown) => ipcRenderer.send("peer-status", s),

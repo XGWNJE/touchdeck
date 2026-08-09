@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
-interface P2PStatus { phase?: string; code?: string; peers?: number; state?: string; error?: string; attempt?: number; }
+interface P2PStatus { phase?: string; code?: string; pairingKey?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; }
 
 // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
 const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
@@ -176,7 +176,9 @@ export default function App() {
             <span className={`text-[#4ade80] text-xs flex-none ${copied ? "" : "hidden"}`}>已复制</span>
           </div>
         )}
-        <div className="text-[#888] text-xs">开启后手机 App 点「P2P 连接」并输入房间码，即与本机直连。</div>
+        {p2p.pairingKey && <div className="text-[#f0c674] text-xs mt-1">首次配对密钥：<span className="font-mono select-text">{p2p.pairingKey}</span>（5 分钟内仅可使用一次）</div>}
+        {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
+        <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可用续连凭据恢复连接。</div>
       </div>
 
       {/* toast */}

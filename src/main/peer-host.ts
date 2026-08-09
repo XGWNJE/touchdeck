@@ -17,6 +17,15 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
 const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.png");
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
+let peerReady = false;
+let pendingPeerStart = false;
+let pendingSignalUrl: string | undefined;
+
+function sendPendingStart(): void {
+  if (!peerReady || !pendingPeerStart || !wins.peer || wins.peer.isDestroyed()) return;
+  pendingPeerStart = false;
+  wins.peer.webContents.send("peer-start", pendingSignalUrl || null);
+}
 
 function createPeerWindow(): void {
   if (wins.peer && !wins.peer.isDestroyed()) return;
@@ -29,20 +38,21 @@ function createPeerWindow(): void {
   if (!app.isPackaged && RENDERER_URL) peerWin.loadURL(`${RENDERER_URL}/peer/`);
   else peerWin.loadFile(path.join(ROOT, "out", "renderer", "peer", "index.html"));
   peerWin.webContents.on("console-message", (_e, _l, msg) => console.log("[peer]", msg));
-  peerWin.on("closed", () => { wins.peer = null; });
+  peerWin.on("closed", () => { wins.peer = null; peerReady = false; });
 }
 
 export function startPeer(signalUrl?: string): { ok: true } {
   createPeerWindow();
   peerStatusBox.value = { phase: "connecting" };
-  // 页面加载完成前 send 会丢消息（模块脚本比旧内联脚本慢一拍，2026-08-06 实证 stuck 在 connecting）
-  const send = () => wins.peer && !wins.peer.isDestroyed() && wins.peer.webContents.send("peer-start", signalUrl || null);
-  if (wins.peer!.webContents.isLoading()) wins.peer!.webContents.once("did-finish-load", send);
-  else send();
+  // renderer 显式回报监听器已注册后才发送，冷启动不会把 peer-start 丢在模块执行之前。
+  pendingSignalUrl = signalUrl;
+  pendingPeerStart = true;
+  sendPendingStart();
   return { ok: true };
 }
 
 export function registerPeerIpc(): void {
+  ipcMain.on("peer-ready", () => { peerReady = true; sendPendingStart(); });
   ipcMain.on("peer-status", (_e, s) => {
     peerStatusBox.value = { ...peerStatusBox.value, ...s };
     if (wins.console && !wins.console.isDestroyed()) {

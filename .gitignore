@@ -28,3 +28,6 @@ dist/
 
 # Electron/Vite 编译输出
 out/
+
+# 本机 e2e 隔离 userData（含临时 QA 配置与日志）
+.tmp-e2e-userdata-*/

@@ -11,6 +11,8 @@ import { actionResult, parseActionRequest, type ActionResult } from "../../share
 // - channel.onclose / ICE failed 清理 peer 并实时刷新设备计数（按 open 通道数，不再虚高）。
 const SIGNAL_DEFAULT = "wss://api.xgwnje.cn/signal";
 const ROOM_KEY = "touchdeck.roomCode";
+const HOST_KEY = "touchdeck.hostKey";
+const PAIR_KEY = "touchdeck.pairKey";
 const MAX_ATTEMPTS = 10;
 const PING_TIMEOUT_MS = 25000; // client 每 5s ping，25s 无消息判半开
 
@@ -22,13 +24,38 @@ let roomCode: string | null = null;
 let turnCfg: TurnCfg | null = null;
 let stopped = true;
 let attempts = 0;
+let pairExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 // 主动 close（onPeerStart 换连接）会触发 onclose，识别并吞掉防误排重连
 let intentionalClose = false;
 // 多客户端：clientId -> { pc, channel, lastPing }（每台手机一条独立 WebRTC 连接）
 const peers = new Map<string, Peer>();
 
+function localSecret(key: string): string {
+  let value = localStorage.getItem(key);
+  if (!value) {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    value = btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+    localStorage.setItem(key, value);
+  }
+  return value;
+}
+
 function postStatus(payload: Record<string, unknown>): void {
   window.touchdeck.peerStatus(payload);
+}
+
+function rememberPairKey(value: string, ttlMs: unknown): void {
+  localStorage.setItem(PAIR_KEY, value);
+  if (pairExpiryTimer) clearTimeout(pairExpiryTimer);
+  // 不用服务端绝对时间计时：Host 与 VPS 的时钟偏差不能延长一次性密钥的保留期。
+  const delay = typeof ttlMs === "number" ? Math.max(0, Math.min(ttlMs, 5 * 60 * 1000)) : 0;
+  pairExpiryTimer = setTimeout(() => {
+    // 只清理仍是这一轮房间的值，避免旧计时器删掉后续重建出来的新密钥。
+    if (localStorage.getItem(PAIR_KEY) === value) {
+      localStorage.removeItem(PAIR_KEY);
+      postStatus({ pairingKey: null });
+    }
+  }, delay);
 }
 
 // 设备计数按「通道实际 open」的设备数（旧版按 Map 条目，死连接虚高）
@@ -57,7 +84,7 @@ async function connectSignal(url: string): Promise<void> {
     postStatus({ phase: "signal-ok" });
     // reclaim：带记忆的房号重连（服务端宽限期内复用房间，旧设备自动恢复）
     const saved = localStorage.getItem(ROOM_KEY);
-    ws!.send(JSON.stringify({ type: "create-room", code: saved || undefined }));
+    ws!.send(JSON.stringify({ type: "create-room", code: saved || undefined, hostKey: localSecret(HOST_KEY) }));
   };
   ws.onmessage = (e) => handleSignal(JSON.parse(e.data));
   ws.onclose = () => {
@@ -81,9 +108,10 @@ function handleSignal(msg: any): void {
   if (msg.type === "room") {
     roomCode = msg.code;
     turnCfg = msg.turn;
+    if (typeof msg.pairKey === "string") rememberPairKey(msg.pairKey, msg.pairTtlMs);
     attempts = 0; // 房间到手才算真正连上，重置退避
     localStorage.setItem(ROOM_KEY, roomCode!);
-    postStatus({ phase: "room", code: roomCode, peers: openChannels() });
+    postStatus({ phase: "room", code: roomCode, pairingKey: localStorage.getItem(PAIR_KEY), hostFingerprint: msg.hostFingerprint, peers: openChannels() });
     return;
   }
   if (msg.type === "room-expired") {
@@ -97,6 +125,10 @@ function handleSignal(msg: any): void {
   }
   if (msg.type === "peer") {
     // 新客户端加入（或 reclaim 后服务端补通告）：host 侧为它创建独立连接并等 offer
+    // 首次密钥一旦被服务端接受即失效；客户端加入是唯一可观测的成功信号，
+    // 此时清掉本地副本，避免在 Windows 端长期留存一次性配对凭据。
+    localStorage.removeItem(PAIR_KEY);
+    if (pairExpiryTimer) { clearTimeout(pairExpiryTimer); pairExpiryTimer = null; }
     postStatus({ phase: "peer-joined" });
     setupPeer(msg.clientId);
     return;
@@ -272,6 +304,9 @@ window.touchdeck.onPeerActionResult((payload) => {
   if (!payload || typeof payload.clientId !== "string" || !payload.result) return;
   sendActionResult(payload.clientId, payload.result as ActionResult);
 });
+
+// 监听器全部挂好后再通知主进程发送冷启动指令。
+window.touchdeck.peerReady();
 
 // 调试句柄（原型期）：模块作用域不污染 window，CDP 排障走这里读链路状态
 (window as any).__peerDebug = {

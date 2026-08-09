@@ -24,6 +24,8 @@ class MainActivity : Activity() {
         const val PREFS_NAME = "touchdeck"
         const val KEY_SIGNAL_URL = "signal_url"
         const val KEY_ROOM_CODE = "room_code"
+        const val KEY_DEVICE_KEY = "device_key"
+        const val KEY_DEVICE_ROOM = "device_room"
         const val DEFAULT_SIGNAL_URL = "wss://api.xgwnje.cn/signal"
     }
 
@@ -91,9 +93,13 @@ class MainActivity : Activity() {
             setText(prefs.getString(KEY_ROOM_CODE, ""))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
+        val pairEdit = EditText(this).apply {
+            hint = "首次连接输入 Windows 显示的配对密钥"
+            setSingleLine()
+        }
         val p2pBtn = Button(this).apply {
             text = getString(R.string.btn_p2p_connect)
-            setOnClickListener { toggleP2P(roomEdit) }
+            setOnClickListener { toggleP2P(roomEdit, pairEdit) }
         }
         p2pRow.addView(roomEdit)
         p2pRow.addView(p2pBtn)
@@ -105,6 +111,7 @@ class MainActivity : Activity() {
         p2pStateText = p2pState
         advBody.addView(p2pLabel, lp)
         advBody.addView(p2pRow, lp)
+        advBody.addView(pairEdit, lp)
         advBody.addView(p2pState, lp)
         val advHint = TextView(this).apply {
             text = getString(R.string.hint_advanced)
@@ -132,8 +139,10 @@ class MainActivity : Activity() {
             runOnUiThread {
                 p2pStateText.text = when (s) {
                     "connecting" -> getString(R.string.status_p2p_connecting)
-                    "ready" -> getString(R.string.status_p2p_ready)
-                    "connected" -> getString(R.string.status_p2p_connected)
+                    "ready" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_ready)
+                        else "已核验主机 ${P2PState.hostFingerprint}，正在建立直连"
+                    "connected" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_connected)
+                        else "已核验主机 ${P2PState.hostFingerprint}，直连已建立"
                     "reconnecting" -> getString(R.string.status_p2p_reconnecting)
                     "host-gone" -> getString(R.string.status_p2p_hostgone)
                     "error" -> getString(R.string.status_p2p_error)
@@ -147,7 +156,7 @@ class MainActivity : Activity() {
     }
 
     /** P2P 连接/断开切换（房间码来自输入框） */
-    private fun toggleP2P(roomEdit: EditText) {
+    private fun toggleP2P(roomEdit: EditText, pairEdit: EditText) {
         if (P2PState.status != "idle" && P2PState.status != "error" && P2PState.status != "closed") {
             P2PState.stop()
         } else {
@@ -157,8 +166,17 @@ class MainActivity : Activity() {
                 return
             }
             prefs.edit().putString(KEY_ROOM_CODE, code).apply()
+            val pairKey = pairEdit.text.toString().trim()
+            val deviceKey = if (prefs.getString(KEY_DEVICE_ROOM, null) == code) prefs.getString(KEY_DEVICE_KEY, null) else null
+            if (deviceKey.isNullOrBlank() && pairKey.length < 24) {
+                p2pStateText.text = "请输入首次配对密钥"
+                return
+            }
             val signal = prefs.getString(KEY_SIGNAL_URL, DEFAULT_SIGNAL_URL).orEmpty()
-            P2PState.start(signal, code) {
+            P2PState.start(signal, code, pairKey, deviceKey,
+                { key -> prefs.edit().putString(KEY_DEVICE_KEY, key).putString(KEY_DEVICE_ROOM, code).apply() },
+                { fingerprint -> runOnUiThread { p2pStateText.text = "已核验主机 $fingerprint，正在建立直连" } }
+            ) {
                 // 通道打开（无 UI 动作，按键走 P2PState.send）
             }
         }

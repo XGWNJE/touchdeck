@@ -55,7 +55,7 @@ app.whenReady().then(() => {
   registerDragIpc();
   registerPeerIpc();
   // 仅用于本机自动化验收；正式运行没有该环境变量，不改变用户的手动开启方式。
-  if (process.env.TOUCHDECK_E2E_P2P === "1") startPeer();
+  if (process.env.TOUCHDECK_E2E_P2P === "1" || process.argv.includes("--touchdeck-e2e-p2p")) startPeer();
   registerMenuIpc();
   createConsoleWindow();
   createTray();

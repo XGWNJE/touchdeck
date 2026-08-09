@@ -8,7 +8,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts",
+    "test": "tsx --test test/**/*.test.ts && node --test server/test/**/*.test.mjs",
+    "test:signal": "node --test server/test/**/*.test.mjs",
     "start": "electron .",
     "build:assets": "tsx scripts/build-panel-assets.ts",
     "dist:win": "npm run build && electron-builder --win --publish never"

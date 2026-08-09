@@ -10,29 +10,35 @@
 //   消除「房间已死、控制台显示僵尸房号」。
 // - host 主动 close-room 立即删房（人为停止不走宽限期）。
 import { WebSocketServer } from "ws";
-import fs from "fs";
+import crypto from "crypto";
 
-const PORT = 8790;
+const PORT = Number(process.env.PORT || 8790);
 const ROOM_TTL_MS = 30 * 60 * 1000;
 const HOST_GRACE_MS = 90 * 1000;
 const MAX_CLIENTS = 8;
-const TURN_CRED_FILE = "/etc/touchdeck-signal/turn-credentials"; // username:password
+const PAIR_TTL_MS = 5 * 60 * 1000;
+const JOIN_ATTEMPT_WINDOW_MS = 60 * 1000;
+const MAX_JOIN_ATTEMPTS = 5;
 const TURN_HOST = "212.135.41.88";
+const TURN_SHARED_SECRET = process.env.TOUCHDECK_TURN_SHARED_SECRET || "";
+
+const attemptsByIp = new Map();
+function newSecret() { return crypto.randomBytes(24).toString("base64url"); }
+function secretHash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
+function fingerprint(value) { return secretHash(value).slice(0, 16).toUpperCase(); }
+function validSecret(value) { return typeof value === "string" && /^[A-Za-z0-9_-]{24,}$/.test(value); }
+function allowJoin(ip) {
+  const now = Date.now();
+  const history = (attemptsByIp.get(ip) || []).filter((at) => now - at < JOIN_ATTEMPT_WINDOW_MS);
+  if (history.length >= MAX_JOIN_ATTEMPTS) return false;
+  history.push(now); attemptsByIp.set(ip, history); return true;
+}
 
 function turnCredentials() {
-  try {
-    const [user, pass] = fs.readFileSync(TURN_CRED_FILE, "utf8").trim().split(":");
-    return {
-      urls: [
-        `turn:${TURN_HOST}:3478?transport=udp`,
-        `turn:${TURN_HOST}:3478?transport=tcp`,
-      ],
-      username: user,
-      credential: pass,
-    };
-  } catch {
-    return null;
-  }
+  if (!TURN_SHARED_SECRET) return null;
+  const username = `${Math.floor(Date.now() / 1000) + 10 * 60}:${crypto.randomBytes(6).toString("hex")}`;
+  return { urls: [`turn:${TURN_HOST}:3478?transport=udp`, `turn:${TURN_HOST}:3478?transport=tcp`], username,
+    credential: crypto.createHmac("sha1", TURN_SHARED_SECRET).update(username).digest("base64") };
 }
 
 const rooms = new Map(); // code -> { host, clients: Map<clientId, ws>, expires, graceTimer }
@@ -95,32 +101,38 @@ const sweeper = setInterval(() => {
 }, 60000);
 wss.on("close", () => clearInterval(sweeper));
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
   let roomCode = null;
   let role = null; // host | client
   let clientId = null; // 仅 client
+  const remoteIp = req.socket.remoteAddress || "unknown";
 
   ws.on("message", (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return send(ws, { type: "error", reason: "bad-json" }); }
 
     if (msg.type === "create-room") {
+      if (!validSecret(msg.hostKey)) return send(ws, { type: "error", reason: "host-auth-required" });
+      const hostKeyHash = secretHash(msg.hostKey);
       let code = null;
       // reclaim：host 带原房号重连。宽限期内（host 不在）直接复用；房号被活房占用则换新号
       const want = typeof msg.code === "string" && /^\d{6}$/.test(msg.code) ? msg.code : null;
       if (want) {
         const r = rooms.get(want);
-        if (r && !r.host && Date.now() <= r.expires) {
+        if (r && !r.host && Date.now() <= r.expires && r.hostKeyHash === hostKeyHash) {
           if (r.graceTimer) { clearTimeout(r.graceTimer); r.graceTimer = null; }
           r.host = ws;
           r.expires = Date.now() + ROOM_TTL_MS; // 续期：reclaim 视为活跃
           roomCode = want; role = "host";
-          send(ws, { type: "room", code: want, role, turn: turnCredentials() });
+          send(ws, { type: "room", code: want, role, hostFingerprint: r.hostFingerprint, turn: turnCredentials() });
           for (const cws of r.clients.values()) send(cws, { type: "host-back" });
           // 把存活的 client 重新通告给 host（host 侧按 clientId 去重）
           for (const cid of r.clients.keys()) send(ws, { type: "peer", peer: "client", clientId: cid });
           console.log(`[signal] room ${want} reclaimed (${r.clients.size} clients restored)`);
           return;
+        }
+        if (r && !r.host && Date.now() <= r.expires && r.hostKeyHash !== hostKeyHash) {
+          return send(ws, { type: "error", reason: "host-auth-failed" });
         }
         if (!r) code = want; // 房号空闲：沿用（旧客户端记忆房号可重 join）
       }
@@ -128,9 +140,11 @@ wss.on("connection", (ws) => {
         code = newCode();
         while (rooms.has(code)) code = newCode();
       }
-      rooms.set(code, { host: ws, clients: new Map(), expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
+      const pairKey = newSecret();
+      rooms.set(code, { host: ws, clients: new Map(), devices: new Map(), hostKeyHash, hostFingerprint: fingerprint(msg.hostKey),
+        pairKeyHash: secretHash(pairKey), pairExpires: Date.now() + PAIR_TTL_MS, expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
       roomCode = code; role = "host";
-      send(ws, { type: "room", code, role, turn: turnCredentials() });
+      send(ws, { type: "room", code, role, pairKey, pairTtlMs: PAIR_TTL_MS, hostFingerprint: fingerprint(msg.hostKey), turn: turnCredentials() });
       return;
     }
 
@@ -140,14 +154,23 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.type === "join-room") {
+      if (!allowJoin(remoteIp)) return send(ws, { type: "error", reason: "too-many-attempts" });
       const r = rooms.get(String(msg.code));
       if (!r) return send(ws, { type: "error", reason: "room-not-found" });
       if (Date.now() > r.expires) { closeRoom(String(msg.code), "expired"); return send(ws, { type: "error", reason: "room-expired" }); }
       if (r.clients.size >= MAX_CLIENTS) return send(ws, { type: "error", reason: "room-full" });
+      let deviceKey = null;
+      if (validSecret(msg.deviceKey) && r.devices.has(secretHash(msg.deviceKey))) {
+        deviceKey = msg.deviceKey;
+      } else if (validSecret(msg.pairKey) && r.pairKeyHash && Date.now() <= r.pairExpires && crypto.timingSafeEqual(Buffer.from(secretHash(msg.pairKey)), Buffer.from(r.pairKeyHash))) {
+        deviceKey = newSecret();
+        r.devices.set(secretHash(deviceKey), true);
+        r.pairKeyHash = null; // 配对密钥只可使用一次；后续只接受该设备续连凭据
+      } else return send(ws, { type: "error", reason: "pairing-required" });
       clientId = newClientId();
       r.clients.set(clientId, ws);
       roomCode = String(msg.code); role = "client";
-      send(ws, { type: "room", code: roomCode, role, clientId, turn: turnCredentials() });
+      send(ws, { type: "room", code: roomCode, role, clientId, deviceKey, hostFingerprint: r.hostFingerprint, turn: turnCredentials() });
       console.log(`[signal] room ${roomCode} client ${clientId} joined (${r.clients.size}/${MAX_CLIENTS})`);
       // host 在宽限期（不在线）时不通告，reclaim 时会统一补通告
       if (r.host) send(r.host, { type: "peer", peer: "client", clientId });
