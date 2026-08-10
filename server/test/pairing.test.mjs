@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, test } from "node:test";
 import { WebSocket } from "ws";
 
 const port = 20000 + Math.floor(Math.random() * 10000);
 const url = `ws://127.0.0.1:${port}`;
+const testDirectory = mkdtempSync(join(tmpdir(), "touchdeck-signal-test-"));
+const deviceStore = join(testDirectory, "devices.json");
 const server = spawn(process.execPath, ["signal.mjs"], {
   cwd: new URL("..", import.meta.url),
-  env: { ...process.env, PORT: String(port), TOUCHDECK_TURN_SHARED_SECRET: "test-turn-secret-not-for-production" },
+  env: { ...process.env, PORT: String(port), TOUCHDECK_TURN_SHARED_SECRET: "test-turn-secret-not-for-production",
+    TOUCHDECK_DEVICE_STORE: deviceStore },
   stdio: ["ignore", "ignore", "pipe"],
 });
 
@@ -149,4 +155,5 @@ test("reclaim rejects a different host key", async () => {
 
 after(() => {
   for (const child of [server]) child.kill();
+  rmSync(testDirectory, { recursive: true, force: true });
 });

@@ -137,22 +137,33 @@ class MainActivity : Activity() {
         // P2P 状态监听（信令回调线程 → 主线程更新 UI）
         P2PState.listener = { s ->
             runOnUiThread {
-                p2pStateText.text = when (s) {
-                    "connecting" -> getString(R.string.status_p2p_connecting)
-                    "ready" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_ready)
-                        else "已核验主机 ${P2PState.hostFingerprint}，正在建立直连"
-                    "connected" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_connected)
-                        else "已核验主机 ${P2PState.hostFingerprint}，直连已建立"
-                    "reconnecting" -> getString(R.string.status_p2p_reconnecting)
-                    "host-gone" -> getString(R.string.status_p2p_hostgone)
-                    "error" -> getString(R.string.status_p2p_error)
-                    "closed" -> getString(R.string.status_p2p_closed)
-                    else -> getString(R.string.status_p2p_idle)
-                }
+                renderP2PState(s)
                 refreshP2PButton()
             }
         }
+        // Activity 可能在 Debug receiver/后台自动续连之后才打开；监听器不会重放旧事件，
+        // 因此首次渲染必须读取当前状态，不能把已连接设备显示成“未连接”。
+        renderP2PState(P2PState.status)
         refreshP2PButton()
+    }
+
+    private fun renderP2PState(state: String) {
+        p2pStateText.text = when (state) {
+            "connecting" -> getString(R.string.status_p2p_connecting)
+            "ready" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_ready)
+                else "已核验主机 ${P2PState.hostFingerprint}，正在建立直连"
+            "connected" -> if (P2PState.hostFingerprint.isBlank()) getString(R.string.status_p2p_connected)
+                else "已核验主机 ${P2PState.hostFingerprint}，直连已建立"
+            "reconnecting" -> getString(R.string.status_p2p_reconnecting)
+            "host-gone" -> getString(R.string.status_p2p_hostgone)
+            "error" -> when (P2PState.errorReason) {
+                "pairing-required", "device-revoked" -> "设备凭据已失效，请输入 Windows 显示的新配对密钥"
+                "state-unavailable" -> "信令身份状态暂不可用，请稍后重试"
+                else -> getString(R.string.status_p2p_error)
+            }
+            "closed" -> getString(R.string.status_p2p_closed)
+            else -> getString(R.string.status_p2p_idle)
+        }
     }
 
     /** P2P 连接/断开切换（房间码来自输入框） */
@@ -167,7 +178,11 @@ class MainActivity : Activity() {
             }
             prefs.edit().putString(KEY_ROOM_CODE, code).apply()
             val pairKey = pairEdit.text.toString().trim()
-            val deviceKey = if (prefs.getString(KEY_DEVICE_ROOM, null) == code) prefs.getString(KEY_DEVICE_KEY, null) else null
+            // 用户明确输入新配对密钥时优先重新登记；否则旧 deviceKey 会永远遮住 pairKey，
+            // 被 Host 撤销后的设备只能清应用数据才能恢复。
+            val deviceKey = if (pairKey.length >= 24) null
+                else if (prefs.getString(KEY_DEVICE_ROOM, null) == code) prefs.getString(KEY_DEVICE_KEY, null)
+                else null
             if (deviceKey.isNullOrBlank() && pairKey.length < 24) {
                 p2pStateText.text = "请输入首次配对密钥"
                 return

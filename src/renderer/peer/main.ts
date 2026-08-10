@@ -13,6 +13,7 @@ const SIGNAL_DEFAULT = "wss://api.xgwnje.cn/signal";
 const ROOM_KEY = "touchdeck.roomCode";
 const HOST_KEY = "touchdeck.hostKey";
 const PAIR_KEY = "touchdeck.pairKey";
+const PAIR_EXPIRES_KEY = "touchdeck.pairExpiresAt";
 const MAX_ATTEMPTS = 10;
 const PING_TIMEOUT_MS = 25000; // client 每 5s ping，25s 无消息判半开
 
@@ -27,6 +28,8 @@ let attempts = 0;
 let pairExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 let pairRequestTimer: ReturnType<typeof setTimeout> | null = null;
 let pairRequestPending = false;
+let revokeRequestTimer: ReturnType<typeof setTimeout> | null = null;
+let revokeRequestPending = false;
 // 主动 close（onPeerStart 换连接）会触发 onclose，识别并吞掉防误排重连
 let intentionalClose = false;
 // 多客户端：clientId -> { pc, channel, lastPing }（每台手机一条独立 WebRTC 连接）
@@ -51,13 +54,35 @@ function rememberPairKey(value: string, ttlMs: unknown): void {
   if (pairExpiryTimer) clearTimeout(pairExpiryTimer);
   // 不用服务端绝对时间计时：Host 与 VPS 的时钟偏差不能延长一次性密钥的保留期。
   const delay = typeof ttlMs === "number" ? Math.max(0, Math.min(ttlMs, 5 * 60 * 1000)) : 0;
+  localStorage.setItem(PAIR_EXPIRES_KEY, String(Date.now() + delay));
   pairExpiryTimer = setTimeout(() => {
     // 只清理仍是这一轮房间的值，避免旧计时器删掉后续重建出来的新密钥。
     if (localStorage.getItem(PAIR_KEY) === value) {
       localStorage.removeItem(PAIR_KEY);
+      localStorage.removeItem(PAIR_EXPIRES_KEY);
       postStatus({ pairingKey: null });
     }
   }, delay);
+}
+
+function clearPairKey(): void {
+  localStorage.removeItem(PAIR_KEY);
+  localStorage.removeItem(PAIR_EXPIRES_KEY);
+  if (pairExpiryTimer) clearTimeout(pairExpiryTimer);
+  pairExpiryTimer = null;
+}
+
+function restorePairKey(active: unknown, ttlMs: unknown): string | null {
+  const saved = localStorage.getItem(PAIR_KEY);
+  const localExpires = Number(localStorage.getItem(PAIR_EXPIRES_KEY) || 0);
+  const serverRemaining = typeof ttlMs === "number" ? Math.max(0, ttlMs) : 0;
+  const remaining = Math.min(Math.max(0, localExpires - Date.now()), serverRemaining);
+  if (active !== true || !saved || remaining <= 0) {
+    clearPairKey();
+    return null;
+  }
+  rememberPairKey(saved, remaining);
+  return saved;
 }
 
 function cancelPairKeyRequest(): void {
@@ -69,6 +94,17 @@ function cancelPairKeyRequest(): void {
 function finishPairKeyRequest(error?: string): void {
   cancelPairKeyRequest();
   postStatus({ pairingPending: false, pairingError: error || null });
+}
+
+function cancelRevokeRequest(): void {
+  revokeRequestPending = false;
+  if (revokeRequestTimer) clearTimeout(revokeRequestTimer);
+  revokeRequestTimer = null;
+}
+
+function finishRevokeRequest(error?: string): void {
+  cancelRevokeRequest();
+  postStatus({ revokingDevices: false, revokeError: error || null });
 }
 
 // 设备计数按「通道实际 open」的设备数（旧版按 Map 条目，死连接虚高）
@@ -104,6 +140,7 @@ async function connectSignal(url: string): Promise<void> {
     if (intentionalClose) { intentionalClose = false; return; }
     if (stopped) return;
     if (pairRequestPending) finishPairKeyRequest("signal-unavailable");
+    if (revokeRequestPending) finishRevokeRequest("signal-unavailable");
     attempts++;
     if (attempts > MAX_ATTEMPTS) {
       stopped = true;
@@ -122,10 +159,13 @@ function handleSignal(msg: any): void {
   if (msg.type === "room") {
     roomCode = msg.code;
     turnCfg = msg.turn;
-    if (typeof msg.pairKey === "string") rememberPairKey(msg.pairKey, msg.pairTtlMs);
+    const pairingKey = typeof msg.pairKey === "string"
+      ? (rememberPairKey(msg.pairKey, msg.pairTtlMs), msg.pairKey)
+      : restorePairKey(msg.pairKeyActive, msg.pairTtlMs);
     attempts = 0; // 房间到手才算真正连上，重置退避
     localStorage.setItem(ROOM_KEY, roomCode!);
-    postStatus({ phase: "room", code: roomCode, pairingKey: localStorage.getItem(PAIR_KEY), hostFingerprint: msg.hostFingerprint, peers: openChannels() });
+    postStatus({ phase: "room", code: roomCode, pairingKey, hostFingerprint: msg.hostFingerprint,
+      peers: openChannels(), devicesRevoked: false, revokeError: null });
     return;
   }
   if (msg.type === "pair-key") {
@@ -142,12 +182,24 @@ function handleSignal(msg: any): void {
     finishPairKeyRequest(typeof msg.reason === "string" ? msg.reason : "request-failed");
     return;
   }
+  if (msg.type === "error" && revokeRequestPending) {
+    finishRevokeRequest(typeof msg.reason === "string" ? msg.reason : "request-failed");
+    return;
+  }
+  if (msg.type === "devices-revoked") {
+    clearPairKey();
+    finishRevokeRequest();
+    postStatus({ devicesRevoked: true, pairingKey: null, peers: openChannels() });
+    return;
+  }
   if (msg.type === "room-expired") {
     // 房间 TTL 到期（服务端主动通知）：清理并提示，不显示僵尸房号
     teardownAll();
     roomCode = null;
     localStorage.removeItem(ROOM_KEY);
+    clearPairKey();
     if (pairRequestPending) finishPairKeyRequest("room-expired");
+    if (revokeRequestPending) finishRevokeRequest("room-expired");
     stopped = true;
     postStatus({ phase: "room-expired", code: null, peers: 0 });
     return;
@@ -157,8 +209,7 @@ function handleSignal(msg: any): void {
     // 只在服务端明确标记 paired 时清掉已消费的一次性密钥；已登记设备用 deviceKey
     // 续连时 paired=false，不能误删正在等待另一台新设备使用的密钥。
     if (msg.paired === true) {
-      localStorage.removeItem(PAIR_KEY);
-      if (pairExpiryTimer) { clearTimeout(pairExpiryTimer); pairExpiryTimer = null; }
+      clearPairKey();
     }
     postStatus({ phase: "peer-joined", ...(msg.paired === true ? { pairingKey: null } : {}) });
     setupPeer(msg.clientId);
@@ -300,6 +351,7 @@ function teardownAll(): void {
 window.touchdeck.onPeerStart((signalUrl) => {
   const url = (signalUrl && signalUrl.trim()) || SIGNAL_DEFAULT;
   cancelPairKeyRequest();
+  cancelRevokeRequest();
   stopped = false;
   attempts = 0;
   if (ws && ws.readyState <= 1) { intentionalClose = true; ws.close(); }
@@ -310,6 +362,7 @@ window.touchdeck.onPeerStart((signalUrl) => {
 window.touchdeck.onPeerStop(() => {
   stopped = true;
   cancelPairKeyRequest();
+  cancelRevokeRequest();
   try {
     // 人为停止：显式删房（不走 host 宽限期），设备端立即收到 peer-left
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "close-room" }));
@@ -317,7 +370,9 @@ window.touchdeck.onPeerStop(() => {
   } catch { /* 忽略 */ }
   teardownAll();
   roomCode = null;
-  localStorage.removeItem(ROOM_KEY);
+  // 只结束当前会话，保留 Host 绑定的房号；下次开启时恢复同一持久登记。
+  // 取消设备授权必须走单独的 revoke-devices，不能把普通“关闭连接”当成撤销。
+  clearPairKey();
   postStatus({ phase: "idle", code: null, peers: 0 });
 });
 
@@ -334,6 +389,22 @@ window.touchdeck.onPeerCreatePairKey(() => {
     pairRequestTimer = setTimeout(() => finishPairKeyRequest("timeout"), 10000);
   } catch {
     finishPairKeyRequest("signal-unavailable");
+  }
+});
+
+window.touchdeck.onPeerRevokeDevices(() => {
+  if (revokeRequestPending) return;
+  if (!roomCode || !ws || ws.readyState !== WebSocket.OPEN) {
+    postStatus({ revokingDevices: false, revokeError: "signal-unavailable" });
+    return;
+  }
+  revokeRequestPending = true;
+  postStatus({ revokingDevices: true, revokeError: null, devicesRevoked: false });
+  try {
+    ws.send(JSON.stringify({ type: "revoke-devices" }));
+    revokeRequestTimer = setTimeout(() => finishRevokeRequest("timeout"), 10000);
+  } catch {
+    finishRevokeRequest("signal-unavailable");
   }
 });
 

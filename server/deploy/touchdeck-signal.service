@@ -8,12 +8,17 @@ User=touchsignal
 Group=touchsignal
 WorkingDirectory=/opt/touchdeck-signal
 ExecStart=/usr/bin/node /opt/touchdeck-signal/signal.mjs
+EnvironmentFile=/etc/touchdeck-signal/security.env
 Restart=on-failure
 RestartSec=3
 MemoryMax=128M
 NoNewPrivileges=true
 ProtectSystem=full
 ReadWritePaths=/etc/touchdeck-signal
+StateDirectory=touchdeck-signal
+StateDirectoryMode=0700
+Environment=TOUCHDECK_DEVICE_STORE=/var/lib/touchdeck-signal/device-registry.json
+Environment=TOUCHDECK_DEVICE_STORE_REQUIRED=1
 PrivateTmp=true
 
 [Install]

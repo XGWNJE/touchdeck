@@ -54,6 +54,8 @@ object P2PState {
     var roomCode: String = ""
     @Volatile
     var hostFingerprint: String = ""
+    @Volatile
+    var errorReason: String = ""
     var listener: ((String) -> Unit)? = null
     var actionListener: ((RemoteActionResult) -> Unit)? = null
 
@@ -64,6 +66,7 @@ object P2PState {
     fun start(signalUrl: String, code: String, pairKey: String, deviceKey: String?, onDeviceKey: (String) -> Unit, onHostFingerprint: (String) -> Unit, onOpen: () -> Unit) {
         stop()
         roomCode = code
+        errorReason = ""
         val c = P2PClient(
             signalUrl, code, pairKey, deviceKey, onDeviceKey, onHostFingerprint,
             onState = { s ->
@@ -82,6 +85,7 @@ object P2PState {
         client = null
         status = "idle"
         hostFingerprint = ""
+        errorReason = ""
         dynamicButtons = null // 断开即清空动态按钮集，菜单回落离线 panel.json
         listener?.invoke("idle")
     }
@@ -201,6 +205,7 @@ class P2PClient(
     private fun handleSignal(msg: JSONObject) {
         when (msg.optString("type")) {
             "room" -> {
+                P2PState.errorReason = ""
                 msg.optString("deviceKey").takeIf { it.isNotBlank() }?.let { key -> deviceKey = key; onDeviceKey(key) }
                 msg.optString("hostFingerprint").takeIf { it.matches(Regex("[A-F0-9]{16}")) }?.let { value ->
                     P2PState.hostFingerprint = value
@@ -235,6 +240,7 @@ class P2PClient(
             }
             "error" -> {
                 val reason = msg.optString("reason")
+                P2PState.errorReason = reason
                 Log.d(TAG, "signal error: $reason")
                 if (reason == "room-not-found") {
                     // 信令重启/host 尚未 reclaim 的瞬态：按重连重试（退避上限内自愈），

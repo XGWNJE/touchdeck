@@ -14,6 +14,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.SystemClock
 import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -65,6 +66,7 @@ class BubbleService : Service() {
 
     // 通讯：P2P 直连（DataChannel 按键），配置/图标全部来自离线 assets
     private var panelConfig: JSONObject? = null
+    private var lastActionHapticAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -88,6 +90,7 @@ class BubbleService : Service() {
                     "timeout" -> "执行超时"
                     else -> "动作状态未知"
                 }
+                vibrateActionResult(result.status)
                 flashLabel(text)
             }
         }
@@ -192,6 +195,36 @@ class BubbleService : Service() {
                 vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION") vibrator.vibrate(40)
+            }
+        }
+    }
+
+    /**
+     * 动作结果触感：成功短促，拦截为轻双击，执行失败/断线/超时为明显长双击。
+     * queued 不震，避免把「已经发出」误感知成「已经执行」。断线可能一次结算多个
+     * pending 请求，因此在很短窗口内合并触感，防止连续震动轰炸。
+     */
+    private fun vibrateActionResult(status: String) {
+        val timings = when (status) {
+            "executed" -> longArrayOf(0, 40)
+            "blocked" -> longArrayOf(0, 35, 55, 35)
+            "failed", "disconnected", "timeout" -> longArrayOf(0, 120, 70, 120)
+            else -> return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastActionHapticAt < 250) return
+        lastActionHapticAt = now
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            } ?: return@runCatching
+            if (!vibrator.hasVibrator()) return@runCatching
+            if (Build.VERSION.SDK_INT >= 26) {
+                vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))
+            } else {
+                @Suppress("DEPRECATION") vibrator.vibrate(timings, -1)
             }
         }
     }

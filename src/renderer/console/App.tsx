@@ -3,13 +3,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
-interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; }
+interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; revokingDevices?: boolean; revokeError?: string; devicesRevoked?: boolean; }
 
 // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
 const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
 
 const card = "bg-[#222228] border border-[#33333a] rounded-xl px-4 py-3.5 mb-3";
 const btnMain = "bg-[#2f6fed] hover:bg-[#3d7dff] text-white rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-default cursor-pointer";
+const btnDanger = "border border-[#7f1d1d] hover:bg-[#3b1b1f] text-[#fca5a5] rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-default cursor-pointer";
 
 const pairingErrorText: Record<string, string> = {
   "signal-unavailable": "信令尚未连接",
@@ -133,6 +134,16 @@ export default function App() {
     }
   };
 
+  const revokeDevices = async () => {
+    if (!window.confirm("忘记全部已配对设备？现有手机和平板会立即断开，之后必须使用新的配对密钥重新登记。")) return;
+    try {
+      const result = await window.touchdeck.peerRevokeDevices();
+      if (!result.ok) toast("当前连接不可用，请重新开启远程连接");
+    } catch (e) {
+      toast("撤销设备失败：" + e);
+    }
+  };
+
   // P2P 状态行渲染（与原 HTML 版逐分支一致）
   const p2pActive = P2P_ACTIVE.includes(p2p.phase || "");
   const p2pConnected = p2p.phase === "connected";
@@ -144,7 +155,7 @@ export default function App() {
   switch (p2p.phase) {
     case "connecting": p2pLabel = "连接信令中…"; break;
     case "signal-ok": p2pLabel = "信令已连接，正在创建房间…"; break;
-    case "room": p2pLabel = "等待手机加入（30 分钟有效）"; break;
+    case "room": p2pLabel = "等待设备加入"; break;
     case "peer-joined": p2pLabel = "手机已加入，正在建立直连…"; break;
     case "peer-state":
       // ICE/连接状态变化：按实际状态显示，不再打回「未开启」谎报
@@ -227,7 +238,17 @@ export default function App() {
         )}
         {p2p.pairingError && <div className="text-[#f87171] text-xs mb-1.5">配对密钥生成失败：{pairingErrorText[p2p.pairingError] || p2p.pairingError}</div>}
         {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
-        <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可用续连凭据恢复连接。</div>
+        <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可跨信令重启使用续连凭据恢复连接。</div>
+        {p2p.code && (
+          <div className="flex items-center gap-2.5 mt-3 pt-3 border-t border-[#33333a]">
+            <span className="text-[#777] text-xs flex-1">“关闭连接”只结束本次会话；需要取消设备授权时使用右侧按钮。</span>
+            <button className={btnDanger} disabled={p2p.revokingDevices} onClick={revokeDevices}>
+              {p2p.revokingDevices ? "正在撤销…" : "忘记全部设备"}
+            </button>
+          </div>
+        )}
+        {p2p.devicesRevoked && <div className="text-[#4ade80] text-xs mt-1.5">已撤销全部设备；请生成新密钥后重新配对。</div>}
+        {p2p.revokeError && <div className="text-[#f87171] text-xs mt-1.5">撤销失败：{pairingErrorText[p2p.revokeError] || p2p.revokeError}</div>}
       </div>
 
       {/* toast */}

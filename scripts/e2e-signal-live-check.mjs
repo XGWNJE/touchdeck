@@ -58,6 +58,8 @@ assert.notEqual(second.reply.deviceKey, first.reply.deviceKey);
 
 first.ws.close();
 second.ws.close();
-reclaim.ws.send(JSON.stringify({ type: "close-room" }));
+const deletedReply = waitForType(reclaim.ws, "registration-deleted");
+reclaim.ws.send(JSON.stringify({ type: "delete-registration" }));
+assert.equal((await deletedReply).type, "registration-deleted");
 reclaim.ws.close();
 console.log("live-host-auth-multi-device-pairing-ok");

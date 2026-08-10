@@ -17,5 +17,13 @@
                 <action android:name="cn.touchdeck.app.DEBUG_PAIR" />
             </intent-filter>
         </receiver>
+        <!-- 仅合并到 Debug APK；不发送按键，只用于真机比较动作结果触感。 -->
+        <receiver
+            android:name=".DebugFeedbackReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="cn.touchdeck.app.DEBUG_FEEDBACK" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

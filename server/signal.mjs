@@ -11,16 +11,22 @@
 // - host 主动 close-room 立即删房（人为停止不走宽限期）。
 import { WebSocketServer } from "ws";
 import crypto from "crypto";
+import { DEFAULT_DEVICE_STORE_PATH, DeviceRegistry } from "./device-registry.mjs";
 
 const PORT = Number(process.env.PORT || 8790);
-const ROOM_TTL_MS = 30 * 60 * 1000;
+const ROOM_TTL_MS = Number(process.env.TOUCHDECK_ROOM_TTL_MS || 30 * 60 * 1000);
+const SWEEP_INTERVAL_MS = Number(process.env.TOUCHDECK_SWEEP_INTERVAL_MS || 60 * 1000);
 const HOST_GRACE_MS = 90 * 1000;
 const MAX_CLIENTS = 8;
+const MAX_REGISTERED_DEVICES = 32;
 const PAIR_TTL_MS = 5 * 60 * 1000;
 const JOIN_ATTEMPT_WINDOW_MS = 60 * 1000;
 const MAX_JOIN_ATTEMPTS = 5;
 const TURN_HOST = "212.135.41.88";
 const TURN_SHARED_SECRET = process.env.TOUCHDECK_TURN_SHARED_SECRET || "";
+const DEVICE_STORE_PATH = process.env.TOUCHDECK_DEVICE_STORE || DEFAULT_DEVICE_STORE_PATH;
+const DEVICE_STORE_REQUIRED = process.env.TOUCHDECK_DEVICE_STORE_REQUIRED === "1";
+const deviceRegistry = new DeviceRegistry(DEVICE_STORE_PATH, { required: DEVICE_STORE_REQUIRED });
 
 const attemptsByIp = new Map();
 function newSecret() { return crypto.randomBytes(24).toString("base64url"); }
@@ -61,10 +67,13 @@ function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
-function issuePairKey(room) {
+function issuePairKey(code, room) {
   const pairKey = newSecret();
-  room.pairKeyHash = secretHash(pairKey);
-  room.pairExpires = Date.now() + PAIR_TTL_MS;
+  const pairKeyHash = secretHash(pairKey);
+  const pairExpires = Date.now() + PAIR_TTL_MS;
+  deviceRegistry.setPair(code, pairKeyHash, pairExpires);
+  room.pairKeyHash = pairKeyHash;
+  room.pairExpires = pairExpires;
   return pairKey;
 }
 
@@ -105,13 +114,17 @@ const heartbeat = setInterval(() => {
 }, 30000);
 wss.on("close", () => clearInterval(heartbeat));
 
-// 房间 TTL 定时清扫：到期主动通知 host（room-expired）与 client（peer-left）
+// Host 在线即滚动续期；TTL 只清理没有活 Host 的遗留会话，不中断连续使用。
 const sweeper = setInterval(() => {
   const now = Date.now();
   for (const [code, r] of rooms) {
+    if (r.host) {
+      r.expires = now + ROOM_TTL_MS;
+      continue;
+    }
     if (now > r.expires) closeRoom(code, "expired");
   }
-}, 60000);
+}, SWEEP_INTERVAL_MS);
 wss.on("close", () => clearInterval(sweeper));
 
 wss.on("connection", (ws, req) => {
@@ -137,7 +150,9 @@ wss.on("connection", (ws, req) => {
           r.host = ws;
           r.expires = Date.now() + ROOM_TTL_MS; // 续期：reclaim 视为活跃
           roomCode = want; role = "host";
-          send(ws, { type: "room", code: want, role, hostFingerprint: r.hostFingerprint, turn: turnCredentials() });
+          send(ws, { type: "room", code: want, role, hostFingerprint: r.hostFingerprint,
+            pairKeyActive: Boolean(r.pairKeyHash && Date.now() <= r.pairExpires),
+            pairTtlMs: Math.max(0, r.pairExpires - Date.now()), turn: turnCredentials() });
           for (const cws of r.clients.values()) send(cws, { type: "host-back" });
           // 把存活的 client 重新通告给 host（host 侧按 clientId 去重）
           for (const cid of r.clients.keys()) send(ws, { type: "peer", peer: "client", clientId: cid, paired: false });
@@ -147,17 +162,41 @@ wss.on("connection", (ws, req) => {
         if (r && !r.host && Date.now() <= r.expires && r.hostKeyHash !== hostKeyHash) {
           return send(ws, { type: "error", reason: "host-auth-failed" });
         }
+        const registered = deviceRegistry.get(want);
+        if (registered && registered.hostKeyHash !== hostKeyHash) {
+          return send(ws, { type: "error", reason: "host-auth-failed" });
+        }
         if (!r) code = want; // 房号空闲：沿用（旧客户端记忆房号可重 join）
       }
       if (!code) {
         code = newCode();
-        while (rooms.has(code)) code = newCode();
+        while (rooms.has(code) || deviceRegistry.has(code)) code = newCode();
       }
-      rooms.set(code, { host: ws, clients: new Map(), devices: new Map(), hostKeyHash, hostFingerprint: fingerprint(msg.hostKey),
-        pairKeyHash: null, pairExpires: 0, expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
-      const pairKey = issuePairKey(rooms.get(code));
+      let registered = deviceRegistry.get(code);
+      let pairKey = null;
+      try {
+        if (!registered) {
+          pairKey = newSecret();
+          const pairKeyHash = secretHash(pairKey);
+          const pairExpires = Date.now() + PAIR_TTL_MS;
+          deviceRegistry.create(code, hostKeyHash, pairKeyHash, pairExpires);
+          registered = deviceRegistry.get(code);
+        } else if (registered.pairKeyHash && Date.now() > registered.pairExpires) {
+          deviceRegistry.setPair(code, null, 0);
+          registered = deviceRegistry.get(code);
+        }
+      } catch (error) {
+        console.error(`[signal] device registry write failed: ${error.message}`);
+        return send(ws, { type: "error", reason: "state-unavailable" });
+      }
+      rooms.set(code, { host: ws, clients: new Map(), devices: new Map(Array.from(registered.devices, (hash) => [hash, true])),
+        hostKeyHash, hostFingerprint: fingerprint(msg.hostKey), pairKeyHash: registered.pairKeyHash,
+        pairExpires: registered.pairExpires, expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
       roomCode = code; role = "host";
-      send(ws, { type: "room", code, role, pairKey, pairTtlMs: PAIR_TTL_MS, hostFingerprint: fingerprint(msg.hostKey), turn: turnCredentials() });
+      send(ws, { type: "room", code, role, ...(pairKey ? { pairKey } : {}),
+        pairKeyActive: Boolean(registered.pairKeyHash && Date.now() <= registered.pairExpires),
+        pairTtlMs: pairKey ? PAIR_TTL_MS : Math.max(0, registered.pairExpires - Date.now()),
+        hostFingerprint: fingerprint(msg.hostKey), turn: turnCredentials() });
       return;
     }
 
@@ -166,8 +205,50 @@ wss.on("connection", (ws, req) => {
       const r = rooms.get(roomCode);
       if (!r || r.host !== ws) return send(ws, { type: "error", reason: "host-auth-failed" });
       if (r.clients.size >= MAX_CLIENTS) return send(ws, { type: "error", reason: "room-full" });
-      const pairKey = issuePairKey(r);
+      if (r.devices.size >= MAX_REGISTERED_DEVICES) return send(ws, { type: "error", reason: "device-limit" });
+      let pairKey;
+      try { pairKey = issuePairKey(roomCode, r); }
+      catch (error) {
+        console.error(`[signal] device registry write failed: ${error.message}`);
+        return send(ws, { type: "error", reason: "state-unavailable" });
+      }
       send(ws, { type: "pair-key", pairKey, pairTtlMs: PAIR_TTL_MS });
+      return;
+    }
+
+    if (msg.type === "revoke-devices") {
+      if (!roomCode || role !== "host") return send(ws, { type: "error", reason: "host-auth-required" });
+      const r = rooms.get(roomCode);
+      if (!r || r.host !== ws) return send(ws, { type: "error", reason: "host-auth-failed" });
+      try { deviceRegistry.revokeAll(roomCode); }
+      catch (error) {
+        console.error(`[signal] device registry write failed: ${error.message}`);
+        return send(ws, { type: "error", reason: "state-unavailable" });
+      }
+      r.devices.clear();
+      r.pairKeyHash = null;
+      r.pairExpires = 0;
+      for (const cws of r.clients.values()) {
+        send(cws, { type: "error", reason: "device-revoked" });
+        cws.close(4003, "device-revoked");
+      }
+      send(ws, { type: "devices-revoked" });
+      return;
+    }
+
+    // 自动化黑盒或显式重置使用：Host 凭据鉴权后删除整个持久身份槽位。
+    // 普通 close-room 绝不走这里，避免把“暂停连接”误当成不可恢复撤销。
+    if (msg.type === "delete-registration") {
+      if (!roomCode || role !== "host") return send(ws, { type: "error", reason: "host-auth-required" });
+      const r = rooms.get(roomCode);
+      if (!r || r.host !== ws) return send(ws, { type: "error", reason: "host-auth-failed" });
+      try { deviceRegistry.delete(roomCode); }
+      catch (error) {
+        console.error(`[signal] device registry write failed: ${error.message}`);
+        return send(ws, { type: "error", reason: "state-unavailable" });
+      }
+      send(ws, { type: "registration-deleted" });
+      closeRoom(roomCode, "registration-deleted");
       return;
     }
 
@@ -187,8 +268,15 @@ wss.on("connection", (ws, req) => {
       if (validSecret(msg.deviceKey) && r.devices.has(secretHash(msg.deviceKey))) {
         deviceKey = msg.deviceKey;
       } else if (validSecret(msg.pairKey) && r.pairKeyHash && Date.now() <= r.pairExpires && crypto.timingSafeEqual(Buffer.from(secretHash(msg.pairKey)), Buffer.from(r.pairKeyHash))) {
+        if (r.devices.size >= MAX_REGISTERED_DEVICES) return send(ws, { type: "error", reason: "device-limit" });
         deviceKey = newSecret();
-        r.devices.set(secretHash(deviceKey), true);
+        const deviceKeyHash = secretHash(deviceKey);
+        try { deviceRegistry.registerDevice(String(msg.code), deviceKeyHash); }
+        catch (error) {
+          console.error(`[signal] device registry write failed: ${error.message}`);
+          return send(ws, { type: "error", reason: "state-unavailable" });
+        }
+        r.devices.set(deviceKeyHash, true);
         paired = true;
         r.pairKeyHash = null; // 配对密钥只可使用一次；后续只接受该设备续连凭据
       } else {

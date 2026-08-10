@@ -73,6 +73,13 @@ export function registerPeerIpc(): void {
     wins.peer.webContents.send("peer-create-pair-key");
     return { ok: true };
   });
+  ipcMain.handle("peer-revoke-devices", () => {
+    if (!wins.peer || wins.peer.isDestroyed() || !peerReady) {
+      return { ok: false, reason: "peer-unavailable" };
+    }
+    wins.peer.webContents.send("peer-revoke-devices");
+    return { ok: true };
+  });
   ipcMain.on("peer-action", (_e, clientId: unknown, raw: unknown) => {
     if (typeof clientId !== "string") return;
     const request = parseActionRequest(raw);
