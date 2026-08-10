@@ -9,5 +9,13 @@
                 <action android:name="cn.touchdeck.app.DEBUG_ACTION" />
             </intent-filter>
         </receiver>
+        <!-- 仅合并到 Debug APK；绕过设备输入法差异，驱动真实信令与 DataChannel 配对验收。 -->
+        <receiver
+            android:name=".DebugPairReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="cn.touchdeck.app.DEBUG_PAIR" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

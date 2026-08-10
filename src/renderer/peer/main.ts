@@ -25,6 +25,8 @@ let turnCfg: TurnCfg | null = null;
 let stopped = true;
 let attempts = 0;
 let pairExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+let pairRequestTimer: ReturnType<typeof setTimeout> | null = null;
+let pairRequestPending = false;
 // 主动 close（onPeerStart 换连接）会触发 onclose，识别并吞掉防误排重连
 let intentionalClose = false;
 // 多客户端：clientId -> { pc, channel, lastPing }（每台手机一条独立 WebRTC 连接）
@@ -56,6 +58,17 @@ function rememberPairKey(value: string, ttlMs: unknown): void {
       postStatus({ pairingKey: null });
     }
   }, delay);
+}
+
+function cancelPairKeyRequest(): void {
+  pairRequestPending = false;
+  if (pairRequestTimer) clearTimeout(pairRequestTimer);
+  pairRequestTimer = null;
+}
+
+function finishPairKeyRequest(error?: string): void {
+  cancelPairKeyRequest();
+  postStatus({ pairingPending: false, pairingError: error || null });
 }
 
 // 设备计数按「通道实际 open」的设备数（旧版按 Map 条目，死连接虚高）
@@ -90,6 +103,7 @@ async function connectSignal(url: string): Promise<void> {
   ws.onclose = () => {
     if (intentionalClose) { intentionalClose = false; return; }
     if (stopped) return;
+    if (pairRequestPending) finishPairKeyRequest("signal-unavailable");
     attempts++;
     if (attempts > MAX_ATTEMPTS) {
       stopped = true;
@@ -114,22 +128,39 @@ function handleSignal(msg: any): void {
     postStatus({ phase: "room", code: roomCode, pairingKey: localStorage.getItem(PAIR_KEY), hostFingerprint: msg.hostFingerprint, peers: openChannels() });
     return;
   }
+  if (msg.type === "pair-key") {
+    if (typeof msg.pairKey !== "string") {
+      finishPairKeyRequest("invalid-response");
+      return;
+    }
+    rememberPairKey(msg.pairKey, msg.pairTtlMs);
+    finishPairKeyRequest();
+    postStatus({ pairingKey: msg.pairKey });
+    return;
+  }
+  if (msg.type === "error" && pairRequestPending) {
+    finishPairKeyRequest(typeof msg.reason === "string" ? msg.reason : "request-failed");
+    return;
+  }
   if (msg.type === "room-expired") {
     // 房间 TTL 到期（服务端主动通知）：清理并提示，不显示僵尸房号
     teardownAll();
     roomCode = null;
     localStorage.removeItem(ROOM_KEY);
+    if (pairRequestPending) finishPairKeyRequest("room-expired");
     stopped = true;
     postStatus({ phase: "room-expired", code: null, peers: 0 });
     return;
   }
   if (msg.type === "peer") {
     // 新客户端加入（或 reclaim 后服务端补通告）：host 侧为它创建独立连接并等 offer
-    // 首次密钥一旦被服务端接受即失效；客户端加入是唯一可观测的成功信号，
-    // 此时清掉本地副本，避免在 Windows 端长期留存一次性配对凭据。
-    localStorage.removeItem(PAIR_KEY);
-    if (pairExpiryTimer) { clearTimeout(pairExpiryTimer); pairExpiryTimer = null; }
-    postStatus({ phase: "peer-joined" });
+    // 只在服务端明确标记 paired 时清掉已消费的一次性密钥；已登记设备用 deviceKey
+    // 续连时 paired=false，不能误删正在等待另一台新设备使用的密钥。
+    if (msg.paired === true) {
+      localStorage.removeItem(PAIR_KEY);
+      if (pairExpiryTimer) { clearTimeout(pairExpiryTimer); pairExpiryTimer = null; }
+    }
+    postStatus({ phase: "peer-joined", ...(msg.paired === true ? { pairingKey: null } : {}) });
     setupPeer(msg.clientId);
     return;
   }
@@ -268,6 +299,7 @@ function teardownAll(): void {
 
 window.touchdeck.onPeerStart((signalUrl) => {
   const url = (signalUrl && signalUrl.trim()) || SIGNAL_DEFAULT;
+  cancelPairKeyRequest();
   stopped = false;
   attempts = 0;
   if (ws && ws.readyState <= 1) { intentionalClose = true; ws.close(); }
@@ -277,6 +309,7 @@ window.touchdeck.onPeerStart((signalUrl) => {
 
 window.touchdeck.onPeerStop(() => {
   stopped = true;
+  cancelPairKeyRequest();
   try {
     // 人为停止：显式删房（不走 host 宽限期），设备端立即收到 peer-left
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "close-room" }));
@@ -286,6 +319,22 @@ window.touchdeck.onPeerStop(() => {
   roomCode = null;
   localStorage.removeItem(ROOM_KEY);
   postStatus({ phase: "idle", code: null, peers: 0 });
+});
+
+window.touchdeck.onPeerCreatePairKey(() => {
+  if (pairRequestPending) return;
+  if (!roomCode || !ws || ws.readyState !== WebSocket.OPEN) {
+    postStatus({ pairingPending: false, pairingError: "signal-unavailable" });
+    return;
+  }
+  pairRequestPending = true;
+  postStatus({ pairingPending: true, pairingError: null });
+  try {
+    ws.send(JSON.stringify({ type: "create-pair-key" }));
+    pairRequestTimer = setTimeout(() => finishPairKeyRequest("timeout"), 10000);
+  } catch {
+    finishPairKeyRequest("signal-unavailable");
+  }
 });
 
 // 主进程广播（按钮集/场景更新）：转发给所有 open 通道；未 open 的设备上线时

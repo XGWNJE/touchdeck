@@ -2,22 +2,18 @@
 
 ## 当前开发主线
 
-TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程操作 Windows 上的 `agent-terminal`**。
+TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程操作 Windows 上的桌面 GUI 编程 Agent**，代表目标是 Codex 这类带完整界面的 Agent。TouchDeck 不替代成熟的终端映射方案。
 
-当前唯一主线是 v0.2.2「远程触控指令可靠性闭环」：
+v0.2.2「远程触控指令可靠性闭环」和 v0.2.3「安全配对」已完成受控验证。当前唯一主线是 v0.3.0「单一黄金工作流」：
 
-- 每次远程按键必须有唯一 `requestId`。
-- 请求必须能在 Android、WebRTC、Windows 执行器和日志之间关联。
-- 必须明确返回 `queued`、`executed`、`blocked`、`failed`、`disconnected`、`timeout`。
-- 目标不匹配或前台探测失败时不得注入。
-- 重试不能造成同一宏执行两次。
-- Android 不能把“消息已发送”显示成“动作已执行”。
-
-当前代码仍是旧的 `{id}` 单向消息，可靠性闭环尚未完成。任何文档、配置或新代码不得把它描述成已完成能力。
+- 先在真实手机和平板上补齐首次配对、设备凭据续连、双设备定向 ACK 和反馈验收。
+- 陌生用户无需修改 JSON，即可在 10 分钟内完成安装、配对、发送和中断。
+- 当前只打磨一个 GUI 编程 Agent 默认预设，动作最终收敛到 8–12 个。
+- Owner 连续真实使用至少 7 天，记录频率、失败、重连和误触，不记录输入内容。
 
 ## 范围锁定
 
-在可靠性闭环和安全配对均达到出口标准前，禁止：
+在单一黄金工作流达到出口标准前，禁止：
 
 - 新增第二个或第三个场景预设。
 - 开发 GUI 配置编辑器、自由拖拽画布或任意组件系统。
@@ -56,7 +52,7 @@ TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程�
 - `npm run dist:win`：构建 Windows setup 与 portable，不发布。
 - `gradlew.bat :app:assembleDebug`：在 `android/` 目录构建 Android Debug APK。
 
-当前 `package.json` 没有 `test` 和 `lint` 脚本。可靠性闭环必须补充自动化测试；不得用 `typecheck` 或 `build` 冒充测试通过。
+当前 `package.json` 有 `test`，没有 `lint` 脚本。不得用 `typecheck` 或 `build` 冒充测试通过。
 
 ## 代码边界
 
@@ -68,7 +64,7 @@ TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程�
 - `android/.../P2PClient.kt`：Android Client 的信令、DataChannel、请求等待、超时和重连。
 - `android/.../BubbleService.kt`：Android 悬浮球、径向菜单和非颜色反馈。
 - `src/preload/index.ts`：IPC 契约；变更协议时同步更新 `src/renderer/env.d.ts`。
-- `touchdeck.config.json`：当前单一 `agent-terminal` 场景的默认动作事实来源。
+- `touchdeck.config.json`：当前单一 GUI 编程 Agent 场景的默认动作事实来源。
 - `layouts/`、`themes/`、`icons/`：当前场景所需资源，不因路线扩张继续增加包数量。
 - `server/signal.mjs`：只负责信令、房间和 TURN 配置；不实现 ACK 和动作执行。
 
@@ -77,9 +73,10 @@ TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程�
 - 信令地址：`wss://api.xgwnje.cn/signal`。
 - TURN 服务：`212.135.41.88:3478`，由信令服务下发配置。
 - 一个房间目前支持 1 个 Host 和最多 8 个 Client。
-- 信令断线、WebRTC 半开、Host 闪断和房间 TTL 已有重连基础，但这不等于动作可靠性闭环已完成。
-- Android 当前发送 `{id}`；v0.2.2 必须迁移为带版本和 `requestId` 的消息，并提供定向 ACK。
-- 6 位房间码当前不是完整的安全认证方案。安全配对属于 v0.2.3，可靠闭环完成后必须立即处理，不能单独公开发布裸房间码版本。
+- 信令断线、WebRTC 半开、Host 闪断和房间 TTL 已有重连机制，仍需在真实设备日常使用中持续验证。
+- Android 已发送版本化 `action` 消息、UUID `requestId` 和 `buttonId`；Host 返回定向 `action-result`。
+- 6 位房间码只定位房间；每台新设备使用独立的 5 分钟一次性配对密钥，Host 可为下一台设备生成新密钥；已登记设备使用各自续连凭据。
+- Host 指纹用于人工核对主机身份。当前设备登记仍随信令房间生命周期存在，房间过期、Host 主动关房或服务重启后需重新配对。
 
 ## 配置和打包事实
 
@@ -117,7 +114,7 @@ TouchDeck 当前只服务一个远程工作流：**Android 手机/平板远程�
 收到“发包”指令时才允许发包；未收到不得创建标签、推送或发布。
 
 1. 在 `CHANGELOG.md` 顶部新增当前版本节，固定包含 `新增`、`修复`、`变更`。
-2. 运行 `python D:/ObjectCode/HarnessOS/scripts/check_docs.py --readme README.md --changelog CHANGELOG.md --version <版本>`。
+2. 运行 `python D:/ObjectCode/HarnessOS/scripts/check_docs.py --readme README.md`（该脚本只接受 `--readme`；CHANGELOG 版本节由 CI 发包任务机械校验，缺节即失败）。
 3. 运行 `node scripts/release.mjs` 检查 `package.json`、Android 和 server 三处版本一致。
 4. 按需运行 `npm run build:assets`，再提交代码并打 `v<版本>` 标签触发 CI。
 5. 等待 CI 全绿，核验 APK、Windows setup、portable 和信令 tar.gz 均存在。

@@ -19,9 +19,11 @@ export interface TouchdeckApi {
   peerStart(signalUrl?: string): Promise<{ ok: boolean }>;
   peerStop(): Promise<{ ok: boolean }>;
   peerStatusGet(): Promise<any>;
+  peerCreatePairKey(): Promise<{ ok: boolean; reason?: string }>;
   peerReady(): void;
   onPeerStart(cb: (url: string | null) => void): void;
   onPeerStop(cb: () => void): void;
+  onPeerCreatePairKey(cb: () => void): void;
   peerStatus(s: unknown): void;
   peerAction(clientId: string, payload: unknown): void;
   onPeerStatus(cb: (s: any) => void): void;

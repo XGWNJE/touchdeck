@@ -1,7 +1,7 @@
 {
     "name": "touchdeck",
     "version": "0.2.3",
-    "description": "Windows 触控快捷工具栏：为 UU 远程 + 平板触屏场景提供一键快捷键面板",
+    "description": "面向 Android 平板远程操作 Windows GUI coding agent（如 Codex）的可靠触控指令面板",
     "main": "out/main/index.js",
     "type": "module",
     "scripts": {

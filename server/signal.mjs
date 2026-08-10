@@ -27,11 +27,17 @@ function newSecret() { return crypto.randomBytes(24).toString("base64url"); }
 function secretHash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function fingerprint(value) { return secretHash(value).slice(0, 16).toUpperCase(); }
 function validSecret(value) { return typeof value === "string" && /^[A-Za-z0-9_-]{24,}$/.test(value); }
-function allowJoin(ip) {
+function joinRateLimited(ip) {
   const now = Date.now();
   const history = (attemptsByIp.get(ip) || []).filter((at) => now - at < JOIN_ATTEMPT_WINDOW_MS);
-  if (history.length >= MAX_JOIN_ATTEMPTS) return false;
-  history.push(now); attemptsByIp.set(ip, history); return true;
+  attemptsByIp.set(ip, history);
+  return history.length >= MAX_JOIN_ATTEMPTS;
+}
+function recordFailedJoin(ip) {
+  const now = Date.now();
+  const history = (attemptsByIp.get(ip) || []).filter((at) => now - at < JOIN_ATTEMPT_WINDOW_MS);
+  history.push(now);
+  attemptsByIp.set(ip, history);
 }
 
 function turnCredentials() {
@@ -53,6 +59,13 @@ function newClientId() {
 
 function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+function issuePairKey(room) {
+  const pairKey = newSecret();
+  room.pairKeyHash = secretHash(pairKey);
+  room.pairExpires = Date.now() + PAIR_TTL_MS;
+  return pairKey;
 }
 
 // 删房并通知：host 收 reason（过期=room-expired，其余=peer-left），client 一律 peer-left
@@ -127,7 +140,7 @@ wss.on("connection", (ws, req) => {
           send(ws, { type: "room", code: want, role, hostFingerprint: r.hostFingerprint, turn: turnCredentials() });
           for (const cws of r.clients.values()) send(cws, { type: "host-back" });
           // 把存活的 client 重新通告给 host（host 侧按 clientId 去重）
-          for (const cid of r.clients.keys()) send(ws, { type: "peer", peer: "client", clientId: cid });
+          for (const cid of r.clients.keys()) send(ws, { type: "peer", peer: "client", clientId: cid, paired: false });
           console.log(`[signal] room ${want} reclaimed (${r.clients.size} clients restored)`);
           return;
         }
@@ -140,11 +153,21 @@ wss.on("connection", (ws, req) => {
         code = newCode();
         while (rooms.has(code)) code = newCode();
       }
-      const pairKey = newSecret();
       rooms.set(code, { host: ws, clients: new Map(), devices: new Map(), hostKeyHash, hostFingerprint: fingerprint(msg.hostKey),
-        pairKeyHash: secretHash(pairKey), pairExpires: Date.now() + PAIR_TTL_MS, expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
+        pairKeyHash: null, pairExpires: 0, expires: Date.now() + ROOM_TTL_MS, graceTimer: null });
+      const pairKey = issuePairKey(rooms.get(code));
       roomCode = code; role = "host";
       send(ws, { type: "room", code, role, pairKey, pairTtlMs: PAIR_TTL_MS, hostFingerprint: fingerprint(msg.hostKey), turn: turnCredentials() });
+      return;
+    }
+
+    if (msg.type === "create-pair-key") {
+      if (!roomCode || role !== "host") return send(ws, { type: "error", reason: "host-auth-required" });
+      const r = rooms.get(roomCode);
+      if (!r || r.host !== ws) return send(ws, { type: "error", reason: "host-auth-failed" });
+      if (r.clients.size >= MAX_CLIENTS) return send(ws, { type: "error", reason: "room-full" });
+      const pairKey = issuePairKey(r);
+      send(ws, { type: "pair-key", pairKey, pairTtlMs: PAIR_TTL_MS });
       return;
     }
 
@@ -154,26 +177,32 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.type === "join-room") {
-      if (!allowJoin(remoteIp)) return send(ws, { type: "error", reason: "too-many-attempts" });
+      if (joinRateLimited(remoteIp)) return send(ws, { type: "error", reason: "too-many-attempts" });
       const r = rooms.get(String(msg.code));
       if (!r) return send(ws, { type: "error", reason: "room-not-found" });
       if (Date.now() > r.expires) { closeRoom(String(msg.code), "expired"); return send(ws, { type: "error", reason: "room-expired" }); }
       if (r.clients.size >= MAX_CLIENTS) return send(ws, { type: "error", reason: "room-full" });
       let deviceKey = null;
+      let paired = false;
       if (validSecret(msg.deviceKey) && r.devices.has(secretHash(msg.deviceKey))) {
         deviceKey = msg.deviceKey;
       } else if (validSecret(msg.pairKey) && r.pairKeyHash && Date.now() <= r.pairExpires && crypto.timingSafeEqual(Buffer.from(secretHash(msg.pairKey)), Buffer.from(r.pairKeyHash))) {
         deviceKey = newSecret();
         r.devices.set(secretHash(deviceKey), true);
+        paired = true;
         r.pairKeyHash = null; // 配对密钥只可使用一次；后续只接受该设备续连凭据
-      } else return send(ws, { type: "error", reason: "pairing-required" });
+      } else {
+        recordFailedJoin(remoteIp);
+        return send(ws, { type: "error", reason: "pairing-required" });
+      }
+      attemptsByIp.delete(remoteIp);
       clientId = newClientId();
       r.clients.set(clientId, ws);
       roomCode = String(msg.code); role = "client";
       send(ws, { type: "room", code: roomCode, role, clientId, deviceKey, hostFingerprint: r.hostFingerprint, turn: turnCredentials() });
       console.log(`[signal] room ${roomCode} client ${clientId} joined (${r.clients.size}/${MAX_CLIENTS})`);
       // host 在宽限期（不在线）时不通告，reclaim 时会统一补通告
-      if (r.host) send(r.host, { type: "peer", peer: "client", clientId });
+      if (r.host) send(r.host, { type: "peer", peer: "client", clientId, paired });
       return;
     }
 

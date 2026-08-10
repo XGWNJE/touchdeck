@@ -3,13 +3,23 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
-interface P2PStatus { phase?: string; code?: string; pairingKey?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; }
+interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; }
 
 // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
 const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
 
 const card = "bg-[#222228] border border-[#33333a] rounded-xl px-4 py-3.5 mb-3";
 const btnMain = "bg-[#2f6fed] hover:bg-[#3d7dff] text-white rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-default cursor-pointer";
+
+const pairingErrorText: Record<string, string> = {
+  "signal-unavailable": "信令尚未连接",
+  "host-auth-required": "主机尚未完成鉴权",
+  "host-auth-failed": "主机鉴权失败",
+  "room-expired": "房间已过期",
+  timeout: "服务端响应超时",
+  "invalid-response": "服务端响应无效",
+  "request-failed": "服务端拒绝请求",
+};
 
 function Dot({ ok }: { ok: boolean }) {
   return <div className={`w-[9px] h-[9px] rounded-full flex-none ${ok ? "bg-[#4ade80] dot-glow" : "bg-[#ef4444]"}`} />;
@@ -114,6 +124,15 @@ export default function App() {
     }
   };
 
+  const createPairKey = async () => {
+    try {
+      const result = await window.touchdeck.peerCreatePairKey();
+      if (!result.ok) toast("当前连接不可用，请重新开启远程连接");
+    } catch (e) {
+      toast("生成配对密钥失败：" + e);
+    }
+  };
+
   // P2P 状态行渲染（与原 HTML 版逐分支一致）
   const p2pActive = P2P_ACTIVE.includes(p2p.phase || "");
   const p2pConnected = p2p.phase === "connected";
@@ -171,7 +190,7 @@ export default function App() {
 
       <div className={card}>
         <h2 className="text-sm font-semibold mb-1">远程连接（P2P 直连）</h2>
-        <div className="text-[#888] text-xs mb-2.5 leading-relaxed">手机 App 输入房间码即可直连本机，不经过公网转发。</div>
+        <div className="text-[#888] text-xs mb-2.5 leading-relaxed">Android 手机或平板输入房间码即可直连本机，按键不经过公网转发。</div>
         <div className="flex items-center gap-2.5 mb-2">
           <Dot ok={p2pDotOk} />
           <span className="text-[#ccc] flex-1 text-[13px]">{p2pLabel}</span>
@@ -196,6 +215,17 @@ export default function App() {
           </div>
         )}
         {p2p.pairingKey && <div className="text-[#888] text-xs mb-1.5">首次配对密钥 5 分钟内仅可使用一次，手机输入后即失效。</div>}
+        {p2p.code && !p2p.pairingKey && (
+          <div className="flex items-center gap-2.5 my-2">
+            <span className="text-[#888] text-xs flex-1">
+              添加另一台手机或平板时，为新设备生成一枚一次性密钥；已配对设备不受影响。
+            </span>
+            <button className={btnMain} disabled={p2p.pairingPending} onClick={createPairKey}>
+              {p2p.pairingPending ? "正在生成…" : "添加另一台设备"}
+            </button>
+          </div>
+        )}
+        {p2p.pairingError && <div className="text-[#f87171] text-xs mb-1.5">配对密钥生成失败：{pairingErrorText[p2p.pairingError] || p2p.pairingError}</div>}
         {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
         <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可用续连凭据恢复连接。</div>
       </div>

@@ -66,6 +66,13 @@ export function registerPeerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle("peer-status-get", () => peerStatusBox.value);
+  ipcMain.handle("peer-create-pair-key", () => {
+    if (!wins.peer || wins.peer.isDestroyed() || !peerReady) {
+      return { ok: false, reason: "peer-unavailable" };
+    }
+    wins.peer.webContents.send("peer-create-pair-key");
+    return { ok: true };
+  });
   ipcMain.on("peer-action", (_e, clientId: unknown, raw: unknown) => {
     if (typeof clientId !== "string") return;
     const request = parseActionRequest(raw);

@@ -9,7 +9,8 @@ if (!match || !expr) {
   process.exit(1);
 }
 
-const list = await (await fetch("http://localhost:9222/json")).json();
+const port = process.env.CDP_PORT || "9222";
+const list = await (await fetch(`http://localhost:${port}/json`)).json();
 const target = list.find((t) => t.url.includes(match));
 if (!target) {
   console.error("target not found for:", match, "available:", list.map((t) => t.url).join(", "));

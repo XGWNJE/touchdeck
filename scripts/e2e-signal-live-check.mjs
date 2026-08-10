@@ -13,6 +13,19 @@ async function request(message) {
   return { ws, reply };
 }
 
+function waitForType(ws, type) {
+  return new Promise((resolve, reject) => {
+    const onMessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type !== type && message.type !== "error") return;
+      ws.removeEventListener("message", onMessage);
+      resolve(message);
+    };
+    ws.addEventListener("message", onMessage);
+    ws.onerror = reject;
+  });
+}
+
 const hostKey = secret();
 const host = await request({ type: "create-room", hostKey });
 assert.equal(host.reply.type, "room");
@@ -26,6 +39,25 @@ imposter.ws.close();
 
 const reclaim = await request({ type: "create-room", code: host.reply.code, hostKey });
 assert.equal(reclaim.reply.type, "room");
+
+const first = await request({ type: "join-room", code: host.reply.code, pairKey: host.reply.pairKey });
+assert.equal(first.reply.type, "room");
+assert.match(first.reply.deviceKey, /^[A-Za-z0-9_-]{24,}$/);
+
+const nextPairReply = waitForType(reclaim.ws, "pair-key");
+reclaim.ws.send(JSON.stringify({ type: "create-pair-key" }));
+const nextPair = await nextPairReply;
+assert.equal(nextPair.type, "pair-key");
+assert.match(nextPair.pairKey, /^[A-Za-z0-9_-]{24,}$/);
+assert.notEqual(nextPair.pairKey, host.reply.pairKey);
+
+const second = await request({ type: "join-room", code: host.reply.code, pairKey: nextPair.pairKey });
+assert.equal(second.reply.type, "room");
+assert.match(second.reply.deviceKey, /^[A-Za-z0-9_-]{24,}$/);
+assert.notEqual(second.reply.deviceKey, first.reply.deviceKey);
+
+first.ws.close();
+second.ws.close();
 reclaim.ws.send(JSON.stringify({ type: "close-room" }));
 reclaim.ws.close();
-console.log("live-host-auth-reclaim-guard-ok");
+console.log("live-host-auth-multi-device-pairing-ok");
