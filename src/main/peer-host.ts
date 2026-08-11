@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROOT, wins, peerStatusBox } from "./state";
-import { enqueueAction } from "./macro";
+import { beginHold, endHold, enqueueAction, releaseAllHolds, releaseClientHold, validateHoldButton } from "./macro";
 import { broadcastButtons } from "./foreground";
 import { RequestLedger, actionResult, parseActionRequest, type ActionResult } from "../shared/action-protocol";
 
@@ -38,10 +38,11 @@ function createPeerWindow(): void {
   if (!app.isPackaged && RENDERER_URL) peerWin.loadURL(`${RENDERER_URL}/peer/`);
   else peerWin.loadFile(path.join(ROOT, "out", "renderer", "peer", "index.html"));
   peerWin.webContents.on("console-message", (_e, _l, msg) => console.log("[peer]", msg));
-  peerWin.on("closed", () => { wins.peer = null; peerReady = false; });
+  peerWin.on("closed", () => { void releaseAllHolds("host-stop"); wins.peer = null; peerReady = false; });
 }
 
 export function startPeer(signalUrl?: string): { ok: true } {
+  void releaseAllHolds("host-stop");
   createPeerWindow();
   peerStatusBox.value = { phase: "connecting" };
   // renderer 显式回报监听器已注册后才发送，冷启动不会把 peer-start 丢在模块执行之前。
@@ -61,6 +62,7 @@ export function registerPeerIpc(): void {
   });
   ipcMain.handle("peer-start", (_e, signalUrl) => startPeer(signalUrl));
   ipcMain.handle("peer-stop", () => {
+    void releaseAllHolds("host-stop");
     if (wins.peer && !wins.peer.isDestroyed()) wins.peer.webContents.send("peer-stop");
     peerStatusBox.value = { phase: "idle" };
     return { ok: true };
@@ -85,14 +87,35 @@ export function registerPeerIpc(): void {
     const request = parseActionRequest(raw);
     if (!request) return;
     const prior = requestLedger.get(clientId, request.requestId);
-    if (prior) return sendResult(clientId, prior);
+    // tap 可直接复用包级终态；hold 必须再询问会话控制器，避免 end/watchdog 后
+    // 迟到的 begin 仍从 ledger 得到陈旧 holding 并误导客户端。
+    if (prior && !request.phase) return sendResult(clientId, prior);
     const report = (result: ActionResult) => {
       requestLedger.record(clientId, result);
       sendResult(clientId, result);
     };
+    if (request.phase && request.interactionId) {
+      void (async () => {
+        if (request.phase === "begin") {
+          const validation = validateHoldButton(request.buttonId);
+          if (!validation.ok) return report(actionResult(request.requestId, validation.status!, validation.reason));
+        }
+        const identity = { clientId, interactionId: request.interactionId!, buttonId: request.buttonId };
+        const result = request.phase === "begin" ? await beginHold(identity) : await endHold(identity);
+        report(actionResult(request.requestId, result.status, result.reason));
+      })();
+      return;
+    }
     const r = enqueueAction(request.buttonId, "peer", { requestId: request.requestId, onResult: report });
     if (r.ok) console.log("[touchdeck] peer action", request.requestId, request.buttonId);
   });
+  ipcMain.on("peer-channel-closed", (_e, clientId: unknown) => {
+    if (typeof clientId === "string") void releaseClientHold(clientId, "disconnect");
+  });
   // 设备通道上线：把当前有效按钮集推下去（安卓动态渲染；离线 panel.json 仅兜底）
   ipcMain.on("peer-channel-open", () => broadcastButtons());
+}
+
+export function releasePeerHoldsForShutdown() {
+  return releaseAllHolds("shutdown");
 }

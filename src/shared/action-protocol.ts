@@ -1,13 +1,17 @@
 // 远程动作协议：不依赖 Electron/Android，供 Host、WebRTC 层和自动化测试共用。
 export const ACTION_PROTOCOL_VERSION = 1;
 
-export type ActionStatus = "queued" | "executed" | "blocked" | "failed" | "disconnected" | "timeout";
+export type ActionStatus = "queued" | "executed" | "holding" | "released" | "blocked" | "failed" | "disconnected" | "timeout";
+
+export type ActionPhase = "begin" | "end";
 
 export interface ActionRequest {
   v: typeof ACTION_PROTOCOL_VERSION;
   type: "action";
   requestId: string;
   buttonId: string;
+  phase?: ActionPhase;
+  interactionId?: string;
 }
 
 export interface ActionResult {
@@ -27,7 +31,22 @@ export function parseActionRequest(value: unknown): ActionRequest | null {
   if (msg.v !== ACTION_PROTOCOL_VERSION || msg.type !== "action") return null;
   if (typeof msg.requestId !== "string" || !REQUEST_ID.test(msg.requestId)) return null;
   if (typeof msg.buttonId !== "string" || !BUTTON_ID.test(msg.buttonId)) return null;
-  return { v: ACTION_PROTOCOL_VERSION, type: "action", requestId: msg.requestId, buttonId: msg.buttonId };
+  const hasPhase = msg.phase !== undefined;
+  const hasInteractionId = msg.interactionId !== undefined;
+  if (hasPhase !== hasInteractionId) return null;
+  if (!hasPhase) {
+    return { v: ACTION_PROTOCOL_VERSION, type: "action", requestId: msg.requestId, buttonId: msg.buttonId };
+  }
+  if (msg.phase !== "begin" && msg.phase !== "end") return null;
+  if (typeof msg.interactionId !== "string" || !REQUEST_ID.test(msg.interactionId)) return null;
+  return {
+    v: ACTION_PROTOCOL_VERSION,
+    type: "action",
+    requestId: msg.requestId,
+    buttonId: msg.buttonId,
+    phase: msg.phase,
+    interactionId: msg.interactionId,
+  };
 }
 
 export function actionResult(requestId: string, status: ActionStatus, reason?: string): ActionResult {

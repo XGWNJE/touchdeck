@@ -336,12 +336,14 @@ function handlePeerSignal(clientId: string, data: any): void {
   }
 }
 
-function teardownPeer(clientId: string): void {
+function teardownPeer(clientId: string, reason = "channel-closed"): void {
   const p = peers.get(clientId);
   if (!p) return;
+  // 先从 Map 移除，避免 channel.close() 重入 onclose 时重复通知主进程。
+  peers.delete(clientId);
+  window.touchdeck.peerChannelClosed(clientId, reason);
   try { if (p.channel) p.channel.close(); } catch { /* 忽略 */ }
   try { if (p.pc) p.pc.close(); } catch { /* 忽略 */ }
-  peers.delete(clientId);
 }
 
 function teardownAll(): void {

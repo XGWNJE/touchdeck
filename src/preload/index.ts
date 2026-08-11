@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld("touchdeck", {
   // 控制台（console）
   consoleStatus: () => ipcRenderer.invoke("console-status"),
   consoleTogglePanel: () => ipcRenderer.invoke("console-toggle-panel"),
+  actionBindingsGet: () => ipcRenderer.invoke("action-bindings-get"),
+  actionBindingsSave: (value: unknown, confirmConflicts?: boolean) => ipcRenderer.invoke("action-bindings-save", value, confirmConflicts),
+  actionBindingReset: (actionId: string) => ipcRenderer.invoke("action-binding-reset", actionId),
+  actionBindingsResetAll: () => ipcRenderer.invoke("action-bindings-reset-all"),
   // P2P 中继（peer / 控制台）
   peerStart: (signalUrl?: string) => ipcRenderer.invoke("peer-start", signalUrl),
   peerStop: () => ipcRenderer.invoke("peer-stop"),
@@ -34,6 +38,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   onPeerRevokeDevices: (cb: () => void) => ipcRenderer.on("peer-revoke-devices", () => cb()),
   peerStatus: (s: unknown) => ipcRenderer.send("peer-status", s),
   peerAction: (clientId: string, payload: unknown) => ipcRenderer.send("peer-action", clientId, payload),
+  peerChannelClosed: (clientId: string, reason?: string) => ipcRenderer.send("peer-channel-closed", clientId, reason),
   onPeerStatus: (cb: (s: any) => void) => ipcRenderer.on("peer-status", (_e: IpcRendererEvent, s: any) => cb(s)),
   onPanelStatus: (cb: (s: any) => void) => ipcRenderer.on("panel-status", (_e: IpcRendererEvent, s: any) => cb(s)),
   onPeerPressFailed: (cb: (id: string) => void) => ipcRenderer.on("peer-press-failed", (_e: IpcRendererEvent, id: string) => cb(id)),

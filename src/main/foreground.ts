@@ -6,6 +6,8 @@ import {
   type PanelButton, type ResolvedConfig,
 } from "../shared/config-resolve";
 import { wins, fgCache, scenarioState } from "./state";
+import { loadActionBindings } from "./action-bindings";
+import { bindingTapCount, LOCKED_ACTION_IDS } from "../shared/action-bindings";
 import {
   ensureWin32, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
   OpenProcess, QueryFullProcessImageNameW, CloseHandle,
@@ -63,12 +65,33 @@ export interface Effective {
 export function currentEffective(): Effective {
   const config = resolveConfig();
   const sc = resolveScenario(config, fgCache);
+  const bindings = loadActionBindings().bindings;
+  const locked = new Set<string>(LOCKED_ACTION_IDS);
+  const buttons = effectiveButtons(config, sc.buttons).map((button) => {
+    if (!locked.has(button.id)) return button;
+    const actionId = button.id as keyof typeof bindings;
+    const binding = bindings[actionId];
+    const tapCount = bindingTapCount(actionId, binding);
+    const macro = tapCount === 2 ? [{ keys: { ...binding.keys } }, { keys: { ...binding.keys } }] : undefined;
+    return {
+      ...button,
+      keys: macro ? undefined : { ...binding.keys },
+      macro,
+      triggerMode: binding.triggerMode,
+      sub: formatBinding(binding.keys, binding.triggerMode, tapCount),
+    };
+  });
   return {
     config,
     scenario: sc.name,
     layout: sc.layout,
-    buttons: effectiveButtons(config, sc.buttons),
+    buttons,
   };
+}
+
+function formatBinding(keys: import("../shared/config-resolve").KeyCombo, triggerMode: "tap" | "hold", tapCount: 1 | 2): string {
+  const parts = [keys.ctrl && "Ctrl", keys.shift && "Shift", keys.alt && "Alt", keys.win && "Win", keys.key].filter(Boolean);
+  return `${parts.join("+")}${tapCount === 2 ? " ×2" : ""} · ${triggerMode === "hold" ? "按住" : "单击"}`;
 }
 
 function onForegroundChange(): void {
@@ -86,7 +109,7 @@ function onForegroundChange(): void {
 // host→client 按钮集推送：设备上线或场景切换时经 DataChannel 下发，
 // 安卓端动态重渲染（离线 panel.json 仅是未连接时的兜底）
 function publicButton(b: PanelButton) {
-  return { id: b.id, icon: b.icon, label: b.label, sub: b.sub, group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux };
+  return { id: b.id, icon: b.icon, label: b.label, sub: b.sub, group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux, triggerMode: b.triggerMode || "tap" };
 }
 
 export function broadcastButtons(): void {

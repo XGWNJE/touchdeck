@@ -33,7 +33,8 @@ data class PanelButton(
     val sub: String,
     val group: String,
     val confirm: Boolean,
-    val aux: Boolean
+    val aux: Boolean,
+    val triggerMode: String
 )
 
 data class RemoteActionResult(val requestId: String, val status: String, val reason: String)
@@ -97,6 +98,9 @@ object P2PState {
 
     fun send(id: String): SendOutcome = client?.send(id) ?: SendOutcome.DISCONNECTED
 
+    fun sendHold(id: String, phase: String, interactionId: String): SendOutcome =
+        client?.sendHold(id, phase, interactionId) ?: SendOutcome.DISCONNECTED
+
     // 只由 debug source-set 的 ADB 测试接收器调用；Release APK 不注册该接收器。
     fun sendWithRequestIdForTest(id: String, requestId: String): SendOutcome =
         client?.sendWithRequestId(id, requestId) ?: SendOutcome.DISCONNECTED
@@ -155,7 +159,12 @@ class P2PClient(
     private var pingFuture: ScheduledFuture<*>? = null
     private var watchdogFuture: ScheduledFuture<*>? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private data class PendingAction(val buttonId: String, var attempts: Int = 0)
+    private data class PendingAction(
+        val buttonId: String,
+        val phase: String? = null,
+        val interactionId: String? = null,
+        var attempts: Int = 0
+    )
     private val pendingActions = ConcurrentHashMap<String, PendingAction>()
 
     fun start() {
@@ -459,7 +468,7 @@ class P2PClient(
                     if (msg.optString("type") == "action-result") {
                         val requestId = msg.optString("requestId")
                         val status = msg.optString("status")
-                        if (requestId.isNotEmpty() && status in setOf("queued", "executed", "blocked", "failed")) {
+                        if (requestId.isNotEmpty() && status in setOf("queued", "executed", "holding", "released", "blocked", "failed")) {
                             Log.d(TAG, "action result requestId=$requestId status=$status")
                             // 超时后的迟到 ACK 不得把「超时」翻成「已执行」；用户只能看到同一请求的单一终态。
                             val pending = pendingActions[requestId]
@@ -543,7 +552,8 @@ class P2PClient(
                     sub = b.optString("sub"),
                     group = b.optString("group"),
                     confirm = b.optBoolean("confirm"),
-                    aux = b.optBoolean("aux")
+                    aux = b.optBoolean("aux"),
+                    triggerMode = b.optString("triggerMode", "tap").let { if (it == "hold") "hold" else "tap" }
                 )
             )
         }
@@ -553,6 +563,12 @@ class P2PClient(
     /** 发送版本化动作；超时先用同一 requestId 重试一次，Host 幂等保证绝不重复执行。 */
     fun send(id: String): SendOutcome {
         return sendWithRequestId(id, UUID.randomUUID().toString())
+    }
+
+    fun sendHold(id: String, phase: String, interactionId: String): SendOutcome {
+        if (phase != "begin" && phase != "end") return SendOutcome.DISCONNECTED
+        val requestId = UUID.randomUUID().toString()
+        return sendPendingAction(requestId, PendingAction(id, phase, interactionId))
     }
 
     /**
@@ -565,6 +581,10 @@ class P2PClient(
             return if (sendPending(requestId, existing)) SendOutcome.QUEUED else SendOutcome.DISCONNECTED
         }
         val pending = PendingAction(id)
+        return sendPendingAction(requestId, pending)
+    }
+
+    private fun sendPendingAction(requestId: String, pending: PendingAction): SendOutcome {
         // 先登记再发包：极快 ACK 也能找到 pending，不能被误当成迟到消息丢弃。
         pendingActions[requestId] = pending
         if (!sendPending(requestId, pending)) {
@@ -572,7 +592,7 @@ class P2PClient(
             return SendOutcome.DISCONNECTED
         }
         exec.schedule({ checkActionTimeout(requestId) }, 4000, TimeUnit.MILLISECONDS)
-        Log.d(TAG, "action queued requestId=$requestId buttonId=$id")
+        Log.d(TAG, "action queued requestId=$requestId buttonId=${pending.buttonId} phase=${pending.phase ?: "tap"}")
         return SendOutcome.QUEUED
     }
 
@@ -580,8 +600,11 @@ class P2PClient(
         val ch = channel ?: return false
         if (ch.state() != DataChannel.State.OPEN) return false
         val json = JSONObject().put("v", 1).put("type", "action")
-            .put("requestId", requestId).put("buttonId", pending.buttonId).toString()
-        return try { ch.send(DataChannel.Buffer(ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) } catch (_: Exception) { false }
+            .put("requestId", requestId).put("buttonId", pending.buttonId)
+        pending.phase?.let { json.put("phase", it) }
+        pending.interactionId?.let { json.put("interactionId", it) }
+        val payload = json.toString()
+        return try { ch.send(DataChannel.Buffer(ByteBuffer.wrap(payload.toByteArray(StandardCharsets.UTF_8)), false)) } catch (_: Exception) { false }
     }
 
     private fun checkActionTimeout(requestId: String) {

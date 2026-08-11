@@ -13,6 +13,24 @@ test("只接受版本化且格式合法的远程动作", () => {
   assert.equal(parseActionRequest({ v: 1, type: "action", requestId, buttonId: "../paste" }), null);
 });
 
+test("保持动作以 phase 和 interactionId 成对扩展，同时兼容旧 tap", () => {
+  const interactionId = "d0d3fcb4-1e4e-4d3f-9876-5c8a5d4b9c04";
+  assert.deepEqual(parseActionRequest({
+    v: 1, type: "action", requestId, buttonId: "voice", phase: "begin", interactionId,
+  }), {
+    v: 1, type: "action", requestId, buttonId: "voice", phase: "begin", interactionId,
+  });
+  assert.equal(parseActionRequest({ v: 1, type: "action", requestId, buttonId: "voice", phase: "begin" }), null);
+  assert.equal(parseActionRequest({ v: 1, type: "action", requestId, buttonId: "voice", interactionId }), null);
+  assert.equal(parseActionRequest({ v: 1, type: "action", requestId, buttonId: "voice", phase: "start", interactionId }), null);
+  assert.equal(parseActionRequest({ v: 1, type: "action", requestId, buttonId: "voice", phase: "end", interactionId: "bad" }), null);
+});
+
+test("保持动作结果支持 holding 和 released", () => {
+  assert.equal(actionResult(requestId, "holding").status, "holding");
+  assert.equal(actionResult(requestId, "released").status, "released");
+});
+
 test("幂等记录按客户端隔离，并保留最终或排队状态", () => {
   const ledger = new RequestLedger(2);
   ledger.record("phone-a", actionResult(requestId, "queued"));

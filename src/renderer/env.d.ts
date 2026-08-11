@@ -16,6 +16,10 @@ export interface TouchdeckApi {
   onMenuReload(cb: () => void): void;
   consoleStatus(): Promise<{ panelRunning: boolean; panelDisabled: boolean }>;
   consoleTogglePanel(): Promise<{ running: boolean }>;
+  actionBindingsGet(): Promise<any>;
+  actionBindingsSave(value: unknown, confirmConflicts?: boolean): Promise<any>;
+  actionBindingReset(actionId: string): Promise<any>;
+  actionBindingsResetAll(): Promise<any>;
   peerStart(signalUrl?: string): Promise<{ ok: boolean }>;
   peerStop(): Promise<{ ok: boolean }>;
   peerStatusGet(): Promise<any>;
@@ -28,6 +32,7 @@ export interface TouchdeckApi {
   onPeerRevokeDevices(cb: () => void): void;
   peerStatus(s: unknown): void;
   peerAction(clientId: string, payload: unknown): void;
+  peerChannelClosed(clientId: string, reason?: string): void;
   onPeerStatus(cb: (s: any) => void): void;
   onPanelStatus(cb: (s: { panelRunning: boolean; panelDisabled: boolean }) => void): void;
   onPeerPressFailed(cb: (id: string) => void): void;

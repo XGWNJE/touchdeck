@@ -189,7 +189,11 @@ class MainActivity : Activity() {
             }
             val signal = prefs.getString(KEY_SIGNAL_URL, DEFAULT_SIGNAL_URL).orEmpty()
             P2PState.start(signal, code, pairKey, deviceKey,
-                { key -> prefs.edit().putString(KEY_DEVICE_KEY, key).putString(KEY_DEVICE_ROOM, code).apply() },
+                { key ->
+                    prefs.edit().putString(KEY_DEVICE_KEY, key).putString(KEY_DEVICE_ROOM, code).apply()
+                    // 一次性配对密钥已经消费，不继续留在可见输入框或 UI 自动化树中。
+                    runOnUiThread { pairEdit.text.clear() }
+                },
                 { fingerprint -> runOnUiThread { p2pStateText.text = "已核验主机 $fingerprint，正在建立直连" } }
             ) {
                 // 通道打开（无 UI 动作，按键走 P2PState.send）

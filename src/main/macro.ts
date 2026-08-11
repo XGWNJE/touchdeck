@@ -8,6 +8,7 @@ import { currentEffective } from "./foreground";
 import { inspectForeground } from "./foreground";
 import { type ActionResult, actionResult } from "../shared/action-protocol";
 import { ActionQueue, type QueuedAction } from "../shared/action-queue";
+import { HoldController, type HoldIdentity, type HoldReleaseReason } from "../shared/hold-controller";
 
 // nut-js 是 ESM 包，用动态 import 按需加载（避免拖慢启动）
 let nutKeyboard: any = null;
@@ -17,6 +18,9 @@ async function ensureNut(): Promise<void> {
     const nut = await import("@nut-tree/nut-js");
     nutKeyboard = nut.keyboard;
     nutKey = nut.Key;
+    // 默认 300ms 会让三键 hold 的 begin/end 各耗时数秒，触摸已经松开后才完成按下。
+    // 保留少量间隔兼顾应用识别，同时让 200ms 防误触门槛后的反馈足够及时。
+    nutKeyboard.config.autoDelayMs = 20;
   }
 }
 
@@ -27,8 +31,25 @@ const KEY_MAP: Record<string, string> = {
   down: "Down",
   enter: "Return",
   backspace: "Backspace",
-  s: "S", c: "C", v: "V", o: "O", a: "A",
+  space: "Space", delete: "Delete", home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown", left: "Left", right: "Right",
 };
+
+function nutKeyFor(key: string): any {
+  const name = KEY_MAP[key] || (/^[a-z]$/.test(key) ? key.toUpperCase() : /^[0-9]$/.test(key) ? `Num${key}` : /^f\d{1,2}$/.test(key) ? key.toUpperCase() : key);
+  const resolved = nutKey[name];
+  if (resolved === undefined) throw new Error("unsupported-key");
+  return resolved;
+}
+
+function comboKeys(keys: KeyCombo): any[] {
+  const result: any[] = [];
+  if (keys.ctrl) result.push(nutKey.LeftControl);
+  if (keys.shift) result.push(nutKey.LeftShift);
+  if (keys.alt) result.push(nutKey.LeftAlt);
+  if (keys.win) result.push(nutKey.LeftSuper);
+  if (keys.key) result.push(nutKeyFor(keys.key));
+  return result;
+}
 
 async function sendKeys(keys: KeyCombo): Promise<void> {
   await ensureNut();
@@ -44,7 +65,7 @@ async function sendKeys(keys: KeyCombo): Promise<void> {
   try {
     for (const m of mods) await nutKeyboard.pressKey(m);
     if (keys.key) {
-      const key = nutKey[KEY_MAP[keys.key] || keys.key];
+      const key = nutKeyFor(keys.key);
       await nutKeyboard.type(key);
     } else {
       // 纯修饰键组合（如微信输入法 Ctrl+Win+Shift 启动语音输入）：按住片刻即触发。
@@ -121,6 +142,50 @@ function actionFeedback(fb: ActionFeedback): void {
 
 const actionQueue = new ActionQueue<MacroQueueItem>(ACTION_QUEUE_MAX);
 
+const heldKeys = new Map<string, any[]>();
+const holdController = new HoldController({
+  begin: async (hold) => {
+    const { buttons } = currentEffective();
+    const btn = buttons.find((candidate) => candidate.id === hold.buttonId);
+    if (!btn || btn.triggerMode !== "hold" || !btn.keys) throw new Error("invalid-hold-button");
+    if (btn.target && !matchTarget(btn.target, inspectForeground())) throw new Error("target-unavailable");
+    await ensureNut();
+    const pressed: any[] = [];
+    try {
+      for (const key of comboKeys(btn.keys)) {
+        await nutKeyboard.pressKey(key);
+        pressed.push(key);
+      }
+      heldKeys.set(hold.interactionId, pressed);
+    } catch (error) {
+      for (const key of pressed.reverse()) { try { await nutKeyboard.releaseKey(key); } catch { /* 继续释放 */ } }
+      throw error;
+    }
+  },
+  release: async (hold) => {
+    await ensureNut();
+    const keys = heldKeys.get(hold.interactionId) || [];
+    heldKeys.delete(hold.interactionId);
+    let failed = false;
+    for (const key of [...keys].reverse()) {
+      try { await nutKeyboard.releaseKey(key); } catch { failed = true; }
+    }
+    if (failed) throw new Error("release-error");
+  },
+  onAutomaticRelease: (hold, result, reason) => actionFeedback({ id: hold.buttonId, ok: result.status === "released", reason, source: "peer" }),
+});
+
+export async function beginHold(identity: HoldIdentity) { return holdController.begin(identity); }
+export async function endHold(identity: HoldIdentity) { return holdController.end(identity); }
+export async function releaseClientHold(clientId: string, reason: HoldReleaseReason = "disconnect") { return holdController.releaseClient(clientId, reason); }
+export async function releaseAllHolds(reason: HoldReleaseReason = "host-stop") { return holdController.releaseAll(reason); }
+export function validateHoldButton(buttonId: string): { ok: boolean; status?: "blocked" | "failed"; reason?: string } {
+  const btn = currentEffective().buttons.find((candidate) => candidate.id === buttonId);
+  if (!btn || btn.triggerMode !== "hold" || !btn.keys) return { ok: false, status: "failed", reason: "invalid-hold-button" };
+  if (btn.target && !matchTarget(btn.target, inspectForeground())) return { ok: false, status: "blocked", reason: "target-unavailable" };
+  return { ok: true };
+}
+
 function queueAction(item: MacroQueueItem): boolean {
   const action: QueuedAction<MacroQueueItem> = {
     value: item,
@@ -152,6 +217,11 @@ function queueAction(item: MacroQueueItem): boolean {
 
 // 入队即完成同步校验（未配置/target 拦截），通过则排队串行执行
 export function enqueueAction(buttonId: string, source: string, options: EnqueueOptions = {}): { ok: boolean; reason?: string; queued?: boolean } {
+  if (holdController.activeHold) {
+    actionFeedback({ id: buttonId, ok: false, reason: "hold-active", source });
+    reportRemote(options, "failed", "hold-active");
+    return { ok: false, reason: "hold-active" };
+  }
   const { buttons } = currentEffective();
   const btn = buttons.find((b) => b.id === buttonId);
   if (!btn) {

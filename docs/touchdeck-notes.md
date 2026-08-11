@@ -2,6 +2,15 @@
 
 > 本文件只记录已验证的实现事实、踩坑和当前缺口。产品路线以 `docs/roadmap.md` 为准，操作规则以 `AGENTS.md` 为准。
 
+## v0.3.0 动作绑定与按住保持（2026-08-11，核心链路双真机已验）
+
+- Windows Host 控制台已为语音、中断、发送提供已知预设、自定义单组组合键和“单击触发/按住保持”；绑定以 schema v1 独立写入 Electron `userData/action-bindings.json`，不修改仓库 JSON，支持重复绑定提示、单项恢复和全部恢复。
+- 默认语音预设为 Codex 听写 `Ctrl+Shift+D` + `hold`；Host 下发按钮时同步实际键位说明与 `triggerMode`，Android 离线 assets 也带默认触发模式。
+- P2P v1 兼容原有 tap 消息，并以独立 `requestId` 的 `begin/end` 和共享 `interactionId` 表达保持会话；Host 全局只允许一个活动保持，重复 begin/end 幂等，其他保持与普通宏在活动期间明确拒绝。
+- Windows 只有在整组按键真实按下后才返回 `holding`；`end`、设备通道关闭、Peer 窗口关闭、Host 停止、应用退出和 60 秒看门狗均进入释放路径，释放时逐键尝试且不会因单键异常跳过余下按键。
+- Android 菜单对 tap 与 hold 均使用 450ms 稳定门槛；hold 达到门槛后短震并发送 begin，松开、滑出、`ACTION_CANCEL`、视图移除和 Service 销毁均幂等尽力发送 end。真正的断线兜底仍由 Host 负责。
+- 自动测试、TypeScript 类型检查、Electron/portable 构建和 Android Debug 构建已通过。两台真机已验证 P2P `OPEN`、定向 ACK、450ms 防误触、语音 `holding → released`，以及推荐中断单次手机触发后由 Host 连发两次 `Esc` 并使真实 Codex 窗口暂停。触感主观强度、滑出/取消、断线和 60 秒超时释放仍需专项真机验收。
+
 ## v0.2.2 当前实现与剩余验证
 
 以下是实现现状，不是已完成能力：
@@ -107,6 +116,7 @@
 ## Android 悬浮球
 
 - Android 使用 Kotlin 薄壳和原生 `RadialMenuView`，启动时优先读取离线 assets。
+- 径向菜单的 tap 与 hold 都必须在同一扇区稳定停留 450ms 后才武装：tap 到点后松手执行，hold 到点后开始并在松手时结束；滑动路过扇区不执行。450ms 是首轮偏保守真机值，后续按 Owner 手感调整。
 - P2P 连接建立后，Host 推送当前有效按钮集；断开后回落到离线 `panel.json`。
 - MIUI 展开层可能从状态栏下方开始，必须使用挂载后的屏幕坐标换算菜单中心。
 - MIUI 未授权通知时 Toast 可能被拦截，选中反馈使用自绘浮层，不依赖 Toast。
@@ -123,6 +133,7 @@
 - 含 `paste` 的宏执行前快照剪贴板，成功或失败后都恢复；日志不得记录剪贴板正文。
 - 中文或长文本优先使用 `paste`；`text` 经过输入法时可能进入候选框而不是目标窗口。
 - 带 `target` 的按钮使用前台进程名或窗口标题正则匹配。目标不匹配时宁可拦截，不向未知窗口注入。
+- Windows Codex 26.803.5235.0 双真机验收确认：任务运行时单次 `Esc` 不会停止，连续两次 `Esc` 才进入“已暂停”。TouchDeck 的推荐“中断”仍由 Android 单击一次触发，但 Host 在同一个动作请求内注入两次 `Esc`；自定义绑定不自动重复。
 
 ## P2P 直连
 

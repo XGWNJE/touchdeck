@@ -8,6 +8,9 @@ import { ROOT, wins, iconCache, fgCache, loadState, saveState } from "./state";
 import { currentEffective } from "./foreground";
 import { enqueueAction } from "./macro";
 import { panelDisabled, panelRunning, startPanel, stopPanel } from "./windows";
+import { ACTION_BINDING_PRESETS, findBindingConflicts, LOCKED_ACTION_IDS, validateActionBindings } from "../shared/action-bindings";
+import { loadActionBindings, resetActionBinding, resetAllActionBindings, saveActionBindings } from "./action-bindings";
+import { broadcastButtons } from "./foreground";
 
 export function registerCommonIpc(): void {
   // 配置 + 当前有效按钮集（aux 常驻 + 场景命中）+ 前台状态：菜单渲染与控制台共用
@@ -43,6 +46,30 @@ export function registerCommonIpc(): void {
 }
 
 export function registerConsoleIpc(): void {
+  const bindingsChanged = () => {
+    if (wins.menu && !wins.menu.isDestroyed()) wins.menu.webContents.send("menu-reload");
+    broadcastButtons();
+  };
+  ipcMain.handle("action-bindings-get", () => ({ bindings: loadActionBindings(), presets: ACTION_BINDING_PRESETS }));
+  ipcMain.handle("action-bindings-save", (_e, value: unknown, confirmConflicts = false) => {
+    const candidate = saveCandidate(value);
+    const conflicts = findBindingConflicts(candidate.bindings);
+    if (conflicts.length && !confirmConflicts) return { ok: false, reason: "binding-conflict", conflicts };
+    const bindings = saveActionBindings(candidate);
+    bindingsChanged();
+    return { ok: true, bindings };
+  });
+  ipcMain.handle("action-binding-reset", (_e, actionId: unknown) => {
+    if (typeof actionId !== "string" || !LOCKED_ACTION_IDS.includes(actionId as any)) return { ok: false, reason: "invalid-action" };
+    const bindings = resetActionBinding(actionId as any);
+    bindingsChanged();
+    return { ok: true, bindings };
+  });
+  ipcMain.handle("action-bindings-reset-all", () => {
+    const bindings = resetAllActionBindings();
+    bindingsChanged();
+    return { ok: true, bindings };
+  });
   ipcMain.handle("console-status", async () => {
     return {
       panelRunning: !panelDisabled() && panelRunning(),
@@ -63,4 +90,10 @@ export function registerConsoleIpc(): void {
     }
     return { running: !panelDisabled() && panelRunning() };
   });
+}
+
+function saveCandidate(value: unknown) {
+  const candidate = validateActionBindings(value);
+  if (!candidate) throw new Error("invalid-action-bindings");
+  return candidate;
 }

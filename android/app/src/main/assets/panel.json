@@ -73,7 +73,8 @@
       "sub": "启动语音",
       "group": "voice",
       "confirm": false,
-      "aux": true
+      "aux": true,
+      "triggerMode": "hold"
     },
     {
       "id": "esc",
@@ -82,7 +83,8 @@
       "sub": "Esc",
       "group": "danger",
       "confirm": true,
-      "aux": true
+      "aux": true,
+      "triggerMode": "tap"
     },
     {
       "id": "enter",
@@ -91,7 +93,8 @@
       "sub": "Enter",
       "group": "agent",
       "confirm": false,
-      "aux": true
+      "aux": true,
+      "triggerMode": "tap"
     },
     {
       "id": "steer",
@@ -100,7 +103,8 @@
       "sub": "插队提示词",
       "group": "agent",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "backspace",
@@ -109,7 +113,8 @@
       "sub": "Backspace",
       "group": "edit",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "slash",
@@ -118,7 +123,8 @@
       "sub": "斜杠",
       "group": "cmd",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "plan",
@@ -127,7 +133,8 @@
       "sub": "Shift+Tab",
       "group": "agent",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "selectall",
@@ -136,7 +143,8 @@
       "sub": "Ctrl+A",
       "group": "agent",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "newline",
@@ -145,7 +153,8 @@
       "sub": "Shift+Enter",
       "group": "edit",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "continue",
@@ -154,7 +163,8 @@
       "sub": "继续执行",
       "group": "agent",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "clear-input",
@@ -163,7 +173,8 @@
       "sub": "清空输入框",
       "group": "edit",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "at",
@@ -172,7 +183,8 @@
       "sub": "引用",
       "group": "cmd",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "copy",
@@ -181,7 +193,8 @@
       "sub": "Ctrl+C",
       "group": "edit",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     },
     {
       "id": "paste",
@@ -190,7 +203,8 @@
       "sub": "Ctrl+V",
       "group": "edit",
       "confirm": false,
-      "aux": false
+      "aux": false,
+      "triggerMode": "tap"
     }
   ]
 }

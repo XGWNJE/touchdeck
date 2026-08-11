@@ -5,9 +5,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, resolveIcon, type PanelButton } from "../src/shared/config-resolve";
+import { defaultActionBindings } from "../src/shared/action-bindings";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const config = resolveConfig();
+const defaultBindings = defaultActionBindings().bindings;
 const assetsDir = path.join(ROOT, "android", "app", "src", "main", "assets");
 const iconsDir = path.join(assetsDir, "icons");
 fs.mkdirSync(iconsDir, { recursive: true });
@@ -42,6 +44,7 @@ const panel = {
     .map((b: PanelButton) => ({
       id: b.id, icon: b.icon, label: b.label, sub: b.sub,
       group: b.group || "edit", confirm: !!b.confirm, aux: !!b.aux,
+      triggerMode: (defaultBindings as Record<string, { triggerMode: "tap" | "hold" }>)[b.id]?.triggerMode || "tap",
     })),
 };
 

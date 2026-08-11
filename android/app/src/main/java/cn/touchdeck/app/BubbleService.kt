@@ -84,6 +84,8 @@ class BubbleService : Service() {
                 val text = when (result.status) {
                     "queued" -> "正在执行…"
                     "executed" -> "已执行"
+                    "holding" -> "正在听写"
+                    "released" -> "已结束听写"
                     "blocked" -> "已拦截：目标不匹配"
                     "failed" -> "执行失败"
                     "disconnected" -> "连接已断开"
@@ -114,6 +116,8 @@ class BubbleService : Service() {
 
     override fun onDestroy() {
         BubbleServiceState.running = false
+        menuView?.cancelActiveHold()
+        finishActiveHold()
         removePanel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
@@ -422,7 +426,7 @@ class BubbleService : Service() {
                 val group = groups?.optJSONObject(b.group.ifEmpty { "edit" })
                 val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
                 val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
-                items.add(RadialMenuView.Item(b.id, b.label.ifEmpty { b.icon }, resolveIconBitmap(b.icon), bg, accent, b.aux))
+                items.add(RadialMenuView.Item(b.id, b.label.ifEmpty { b.icon }, resolveIconBitmap(b.icon), bg, accent, b.aux, b.triggerMode))
             }
         } else {
             val buttons = cfg.getJSONArray("buttons")
@@ -431,7 +435,7 @@ class BubbleService : Service() {
                 val group = groups?.optJSONObject(b.optString("group", "edit"))
                 val bg = parseCssColor(group?.optString("background") ?: btn.optString("background"), 0xff2e2e36.toInt())
                 val accent = parseCssColor(group?.optString("borderColor") ?: btn.optString("borderColor"), 0x1affffff)
-                items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", b.optString("icon", "")), resolveIconBitmap(b.optString("icon", "")), bg, accent, b.optBoolean("aux")))
+                items.add(RadialMenuView.Item(b.optString("id"), b.optString("label", b.optString("icon", "")), resolveIconBitmap(b.optString("icon", "")), bg, accent, b.optBoolean("aux"), b.optString("triggerMode", "tap")))
             }
         }
 
@@ -483,6 +487,12 @@ class BubbleService : Service() {
                     android.util.Log.d("TouchDeck", "onSelect id=$id label=$label")
                     pressServer(id, label)
                     collapsePanel()
+                },
+                onHoldBegin = { id, label, interactionId ->
+                    beginHold(id, label, interactionId)
+                },
+                onHoldEnd = { id, label, interactionId ->
+                    endHold(id, label, interactionId)
                 }
             )
             menuView = menu
@@ -520,6 +530,7 @@ class BubbleService : Service() {
     }
 
     private fun removePanel() {
+        menuView?.cancelActiveHold()
         panelView?.let { overlay -> runCatching { windowManager.removeView(overlay) } }
         panelView = null
         menuView = null
@@ -534,6 +545,40 @@ class BubbleService : Service() {
             SendOutcome.QUEUED -> flashLabel("等待执行：$label")
             SendOutcome.DISCONNECTED -> flashLabel("P2P 未连接")
         }
+    }
+
+    private data class ActiveHold(val buttonId: String, val label: String, val interactionId: String)
+    private var activeHold: ActiveHold? = null
+
+    private fun beginHold(id: String, label: String, interactionId: String) {
+        finishActiveHold()
+        activeHold = ActiveHold(id, label, interactionId)
+        // 200ms 稳定门槛已在 RadialMenuView 达成；此处用短震确认进入保持会话。
+        vibrateOnDragStart()
+        when (P2PState.sendHold(id, "begin", interactionId)) {
+            SendOutcome.QUEUED -> flashLabel("正在开始：$label")
+            SendOutcome.DISCONNECTED -> {
+                activeHold = null
+                flashLabel("P2P 未连接")
+            }
+        }
+    }
+
+    private fun endHold(id: String, label: String, interactionId: String) {
+        val active = activeHold
+        if (active?.interactionId != interactionId) return
+        activeHold = null
+        when (P2PState.sendHold(id, "end", interactionId)) {
+            SendOutcome.QUEUED -> flashLabel("已松开：$label")
+            SendOutcome.DISCONNECTED -> flashLabel("连接已断开，正在释放")
+        }
+    }
+
+    /** Service/面板异常退出的尽力释放；Host 断线与 watchdog 仍是最终兜底。 */
+    private fun finishActiveHold() {
+        val active = activeHold ?: return
+        activeHold = null
+        P2PState.sendHold(active.buttonId, "end", active.interactionId)
     }
 
     /**

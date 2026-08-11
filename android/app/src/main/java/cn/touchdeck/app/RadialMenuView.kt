@@ -10,6 +10,7 @@ import android.graphics.RectF
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -38,10 +39,20 @@ class RadialMenuView(
     viewW: Float = 0f,
     viewH: Float = 0f,
     private val onDismiss: () -> Unit,
-    private val onSelect: (id: String, label: String) -> Unit
+    private val onSelect: (id: String, label: String) -> Unit,
+    private val onHoldBegin: (id: String, label: String, interactionId: String) -> Unit,
+    private val onHoldEnd: (id: String, label: String, interactionId: String) -> Unit
 ) : View(context) {
 
-    data class Item(val id: String, val label: String, val icon: Bitmap?, val colorBg: Int, val colorAccent: Int, val aux: Boolean = false)
+    data class Item(
+        val id: String,
+        val label: String,
+        val icon: Bitmap?,
+        val colorBg: Int,
+        val colorAccent: Int,
+        val aux: Boolean = false,
+        val triggerMode: String = "tap"
+    )
 
     /** 一个落位的扇区：环半径区间 + 角度区间 + 占据它的按键 */
     private class Slot(val inner: Float, val outer: Float, val a0: Float, val a1: Float, val item: Item)
@@ -57,7 +68,65 @@ class RadialMenuView(
     private val startAngle: Float
     private val sweepAngle: Float
     private var pressedIndex = -1
+    private var triggerRunnable: Runnable? = null
+    private var tapArmedIndex = -1
+    private var holdInteractionId: String? = null
+    private var holdBegun = false
     private val slots = ArrayList<Slot>()
+
+    companion object {
+        // 滑选经过扇区时必须稳定停留后才武装；同时适用于 tap 与 hold。
+        // 450ms 是首轮偏保守真机值，后续按 Owner 手感调整。
+        private const val TRIGGER_ARM_DELAY_MS = 450L
+    }
+
+    private fun cancelTriggerTimer() {
+        triggerRunnable?.let { removeCallbacks(it) }
+        triggerRunnable = null
+    }
+
+    private fun armTrigger(index: Int) {
+        cancelTriggerTimer()
+        tapArmedIndex = -1
+        if (index !in slots.indices) return
+        val runnable = Runnable {
+            triggerRunnable = null
+            if (pressedIndex != index) return@Runnable
+            val item = slots[index].item
+            if (item.triggerMode != "hold") {
+                tapArmedIndex = index
+                android.util.Log.d("TouchDeck", "armed tap index=$index id=${item.id}")
+                return@Runnable
+            }
+            if (holdBegun) return@Runnable
+            val interactionId = UUID.randomUUID().toString()
+            holdInteractionId = interactionId
+            holdBegun = true
+            android.util.Log.d("TouchDeck", "armed hold index=$index id=${item.id}")
+            onHoldBegin(item.id, item.label, interactionId)
+        }
+        triggerRunnable = runnable
+        postDelayed(runnable, TRIGGER_ARM_DELAY_MS)
+    }
+
+    /** 幂等结束：滑出、取消、视图移除和 Service 销毁都可以安全调用。 */
+    fun cancelActiveHold() {
+        cancelTriggerTimer()
+        tapArmedIndex = -1
+        val interactionId = holdInteractionId
+        val item = if (holdBegun && pressedIndex in slots.indices) slots[pressedIndex].item else null
+        holdBegun = false
+        holdInteractionId = null
+        if (item != null && interactionId != null) onHoldEnd(item.id, item.label, interactionId)
+    }
+
+    private fun updatePressed(index: Int) {
+        if (index == pressedIndex) return
+        cancelActiveHold()
+        pressedIndex = index
+        armTrigger(index)
+        invalidate()
+    }
 
     init {
         // 展开区域判定（画布角度：0°=正右，顺时针为正）
@@ -244,19 +313,25 @@ class RadialMenuView(
     /** 滑选手势桥：BubbleService 转发手指位置（视图坐标），高亮跟随 */
     fun updatePointer(viewX: Float, viewY: Float) {
         val idx = hitSector(viewX, viewY)
-        if (idx != pressedIndex) {
-            pressedIndex = idx
-            invalidate()
-        }
+        updatePressed(idx)
     }
 
     /** 滑选手势桥：松手确认。命中=触发 onSelect，落空=触发 onDismiss */
     fun releasePointer(viewX: Float, viewY: Float): Int {
         val idx = hitSector(viewX, viewY)
         android.util.Log.d("TouchDeck", "releasePointer x=$viewX y=$viewY hit=$idx")
+        val item = slots.getOrNull(idx)?.item
+        val tapArmed = tapArmedIndex == idx
+        if (item?.triggerMode == "hold") {
+            cancelActiveHold()
+            onDismiss()
+        } else {
+            cancelActiveHold()
+            if (item != null && tapArmed) onSelect(item.id, item.label) else onDismiss()
+        }
         pressedIndex = -1
         invalidate()
-        if (idx >= 0) onSelect(slots[idx].item.id, slots[idx].item.label) else onDismiss()
+        if (idx < 0) onDismiss()
         return idx
     }
 
@@ -266,33 +341,45 @@ class RadialMenuView(
                 // 全部触摸由本视图接管：按下即开始滑选，不按命中与否分发
                 pressedIndex = hitSector(e.x, e.y)
                 android.util.Log.d("TouchDeck", "DOWN x=${e.x} y=${e.y} cx=$cx cy=$cy hit=$pressedIndex")
+                armTrigger(pressedIndex)
                 if (pressedIndex >= 0) invalidate()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
                 // 滑动选择：高亮跟随手指扫过的扇区
                 val idx = hitSector(e.x, e.y)
-                if (idx != pressedIndex) {
-                    pressedIndex = idx
-                    invalidate()
-                }
+                updatePressed(idx)
                 return true
             }
             MotionEvent.ACTION_UP -> {
                 // 松开确认：松在扇区上=选中；松在空白=取消（收起菜单）
                 val idx = hitSector(e.x, e.y)
                 android.util.Log.d("TouchDeck", "UP x=${e.x} y=${e.y} hit=$idx")
-                if (idx >= 0) onSelect(slots[idx].item.id, slots[idx].item.label) else onDismiss()
+                val item = slots.getOrNull(idx)?.item
+                val tapArmed = tapArmedIndex == idx
+                if (item?.triggerMode == "hold") {
+                    cancelActiveHold()
+                    onDismiss()
+                } else {
+                    cancelActiveHold()
+                    if (item != null && tapArmed) onSelect(item.id, item.label) else onDismiss()
+                }
                 pressedIndex = -1
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                cancelActiveHold()
                 pressedIndex = -1
                 invalidate()
                 return true
             }
         }
         return false
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelActiveHold()
+        super.onDetachedFromWindow()
     }
 }

@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
 interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; revokingDevices?: boolean; revokeError?: string; devicesRevoked?: boolean; }
+type ActionId = "voice" | "esc" | "enter";
+interface Binding { presetId: string; keys: Record<string, boolean | string>; triggerMode: "tap" | "hold"; }
+interface BindingsData { schemaVersion: 1; bindings: Record<ActionId, Binding>; }
+interface Preset extends Binding { label: string; description: string; }
 
 // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
 const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
@@ -35,6 +39,10 @@ export default function App() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
   const [p2pBusy, setP2pBusy] = useState(false);
+  const [bindingOpen, setBindingOpen] = useState(false);
+  const [bindings, setBindings] = useState<BindingsData | null>(null);
+  const [presets, setPresets] = useState<Record<ActionId, Preset[]> | null>(null);
+  const [bindingBusy, setBindingBusy] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toast = useCallback((text: string, ms = 1500) => {
@@ -46,6 +54,12 @@ export default function App() {
   const refresh = useCallback(async () => {
     setPanel(await window.touchdeck.consoleStatus());
     setP2p(await window.touchdeck.peerStatusGet());
+  }, []);
+
+  const refreshBindings = useCallback(async () => {
+    const data = await window.touchdeck.actionBindingsGet();
+    setBindings(data.bindings);
+    setPresets(data.presets);
   }, []);
 
   useEffect(() => {
@@ -72,12 +86,53 @@ export default function App() {
       if (cfg.configErrors && cfg.configErrors.length) toast(`配置错误 ${cfg.configErrors.length} 条：${cfg.configErrors[0]}`, 4000);
     });
     refresh();
+    refreshBindings();
     // 隐藏进托盘后暂停轮询，回前台立即补一次
     const timer = setInterval(() => { if (!document.hidden) refresh(); }, 4000);
     const onVis = () => { if (!document.hidden) refresh(); };
     document.addEventListener("visibilitychange", onVis);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVis); };
-  }, [refresh, toast]);
+  }, [refresh, refreshBindings, toast]);
+
+  const updateBinding = (actionId: ActionId, binding: Binding) => {
+    setBindings((current) => current ? { ...current, bindings: { ...current.bindings, [actionId]: binding } } : current);
+  };
+
+  const choosePreset = (actionId: ActionId, presetId: string) => {
+    const current = bindings?.bindings[actionId];
+    if (!current) return;
+    const preset = presets?.[actionId].find((item) => item.presetId === presetId);
+    updateBinding(actionId, preset
+      ? { presetId: preset.presetId, keys: { ...preset.keys }, triggerMode: preset.triggerMode }
+      : { ...current, presetId: "custom" });
+  };
+
+  const saveBindings = async (confirmConflicts = false) => {
+    if (!bindings) return;
+    setBindingBusy(true);
+    try {
+      const result = await window.touchdeck.actionBindingsSave(bindings, confirmConflicts);
+      if (!result.ok && result.reason === "binding-conflict") {
+        if (window.confirm("存在重复快捷键，可能导致动作含义不明确。仍要保存吗？")) return await saveBindings(true);
+        return;
+      }
+      if (!result.ok) throw new Error(result.reason || "unknown");
+      setBindings(result.bindings);
+      toast("动作绑定已保存并同步到 Android");
+    } catch (e) { toast("保存失败：" + e, 2600); }
+    finally { setBindingBusy(false); }
+  };
+
+  const resetBinding = async (actionId: ActionId) => {
+    const result = await window.touchdeck.actionBindingReset(actionId);
+    if (result.ok) { setBindings(result.bindings); toast("已恢复推荐值"); }
+  };
+
+  const resetAllBindings = async () => {
+    if (!window.confirm("恢复全部推荐绑定？")) return;
+    const result = await window.touchdeck.actionBindingsResetAll();
+    if (result.ok) { setBindings(result.bindings); toast("已恢复全部推荐值"); }
+  };
 
   const togglePanel = async () => {
     setPanelBusy(true);
@@ -197,6 +252,40 @@ export default function App() {
             {panel.panelRunning ? "关闭面板" : "开启面板"}
           </button>
         </div>
+      </div>
+
+      <div className={card}>
+        <button className="w-full flex items-center text-left cursor-pointer" onClick={() => setBindingOpen((open) => !open)}>
+          <span className="flex-1"><span className="block text-sm font-semibold">动作绑定</span><span className="block text-[#888] text-xs mt-1">语音、中断、发送的预设、自定义组合键与触发模式</span></span>
+          <span className="text-[#888]">{bindingOpen ? "收起" : "设置"}</span>
+        </button>
+        {bindingOpen && bindings && presets && (
+          <div className="mt-3 pt-3 border-t border-[#33333a]">
+            {(["voice", "esc", "enter"] as ActionId[]).map((actionId) => {
+              const binding = bindings.bindings[actionId];
+              const names = { voice: "语音", esc: "中断", enter: "发送" };
+              return <div key={actionId} className="mb-3 p-2.5 bg-[#1b1b20] rounded-lg border border-[#33333a]">
+                <div className="flex items-center gap-2 mb-2"><strong className="text-sm flex-1">{names[actionId]}</strong><button className="text-xs text-[#9ac8ff] cursor-pointer" onClick={() => resetBinding(actionId)}>恢复</button></div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <select className="bg-[#27272d] border border-[#44444d] rounded px-2 py-1.5 text-xs" value={binding.presetId} onChange={(e) => choosePreset(actionId, e.target.value)}>
+                    {presets[actionId].map((preset) => <option key={preset.presetId} value={preset.presetId}>{preset.label} · {preset.description}</option>)}
+                    <option value="custom">自定义</option>
+                  </select>
+                  <select className="bg-[#27272d] border border-[#44444d] rounded px-2 py-1.5 text-xs" value={binding.triggerMode} disabled={binding.presetId !== "custom"} onChange={(e) => updateBinding(actionId, { ...binding, triggerMode: e.target.value as "tap" | "hold" })}>
+                    <option value="tap">单击触发</option><option value="hold">按住保持</option>
+                  </select>
+                </div>
+                {binding.presetId === "custom" && <div className="flex items-center gap-2 flex-wrap">
+                  {(["ctrl", "shift", "alt", "win"] as const).map((mod) => <label key={mod} className="text-xs text-[#ccc]"><input type="checkbox" className="mr-1" checked={binding.keys[mod] === true} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, [mod]: e.target.checked } })}/>{mod === "win" ? "Win" : mod[0].toUpperCase() + mod.slice(1)}</label>)}
+                  <select className="ml-auto bg-[#27272d] border border-[#44444d] rounded px-2 py-1 text-xs" value={typeof binding.keys.key === "string" ? binding.keys.key : ""} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, key: e.target.value || undefined as any } })}>
+                    <option value="">无主键</option>{["escape","tab","enter","backspace","space",..."abcdefghijklmnopqrstuvwxyz"].map((key) => <option key={key} value={key}>{key}</option>)}
+                  </select>
+                </div>}
+              </div>;
+            })}
+            <div className="flex gap-2 justify-end"><button className={btnDanger} onClick={resetAllBindings}>全部恢复</button><button className={btnMain} disabled={bindingBusy} onClick={() => saveBindings()}>{bindingBusy ? "保存中…" : "保存并同步"}</button></div>
+          </div>
+        )}
       </div>
 
       <div className={card}>

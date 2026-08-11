@@ -51,6 +51,7 @@ export interface PanelButton {
   icon?: string; label?: string; sub?: string; group?: string;
   confirm?: boolean; aux?: boolean;
   keys?: KeyCombo; macro?: MacroStep[]; target?: ButtonTarget;
+  triggerMode?: "tap" | "hold";
   [k: string]: unknown;
 }
 export interface Scenario { name: string; target?: ButtonTarget; layout?: string; }

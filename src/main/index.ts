@@ -8,7 +8,7 @@ import { ROOT, wins } from "./state";
 import { setExternalConfigDir } from "../shared/config-resolve";
 import { registerCommonIpc, registerConsoleIpc } from "./ipc";
 import { registerDragIpc } from "./drag";
-import { registerPeerIpc, startPeer } from "./peer-host";
+import { registerPeerIpc, releasePeerHoldsForShutdown, startPeer } from "./peer-host";
 import { registerConfigWatch } from "./hotreload";
 import { pollForeground } from "./foreground";
 import {
@@ -80,7 +80,14 @@ app.whenReady().then(() => {
 });
 
 // 托盘「退出」与真实退出：放行窗口关闭
-app.on("before-quit", () => {
+let releaseBeforeQuit = false;
+app.on("before-quit", (event) => {
+  if (!releaseBeforeQuit) {
+    event.preventDefault();
+    releaseBeforeQuit = true;
+    void releasePeerHoldsForShutdown().finally(() => app.quit());
+    return;
+  }
   (app as any).isQuitting = true;
 });
 app.on("will-quit", () => globalShortcut.unregisterAll());
