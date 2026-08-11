@@ -1,6 +1,6 @@
 import type { KeyCombo } from "./config-resolve";
 
-export type LockedActionId = "voice" | "esc" | "enter";
+export type LockedActionId = "voice" | "esc" | "enter" | "newline" | "paste" | "command-menu" | "clear-input" | "delete-word" | "slash";
 export type TriggerMode = "tap" | "hold";
 
 export interface ActionBinding {
@@ -18,10 +18,15 @@ export interface BindingPreset extends ActionBinding {
   label: string;
   description: string;
   tapCount?: 2;
+  macro?: readonly KeyCombo[];
+  text?: string;
 }
 
 export const ACTION_BINDINGS_SCHEMA_VERSION = 1 as const;
-export const LOCKED_ACTION_IDS: readonly LockedActionId[] = ["voice", "esc", "enter"];
+export const LOCKED_ACTION_IDS: readonly LockedActionId[] = [
+  "voice", "esc", "enter", "newline", "paste", "command-menu",
+  "clear-input", "delete-word", "slash",
+];
 
 export const ACTION_BINDING_PRESETS: Record<LockedActionId, readonly BindingPreset[]> = {
   voice: [
@@ -35,7 +40,34 @@ export const ACTION_BINDING_PRESETS: Record<LockedActionId, readonly BindingPres
   enter: [
     { presetId: "recommended", label: "推荐", description: "Enter", keys: { key: "enter" }, triggerMode: "tap" },
   ],
+  newline: [
+    { presetId: "recommended", label: "推荐", description: "Shift+Enter", keys: { shift: true, key: "enter" }, triggerMode: "tap" },
+  ],
+  paste: [
+    { presetId: "recommended", label: "推荐", description: "Ctrl+V", keys: { ctrl: true, key: "v" }, triggerMode: "tap" },
+  ],
+  "command-menu": [
+    { presetId: "codex-recommended", label: "Codex 推荐", description: "Ctrl+K", keys: { ctrl: true, key: "k" }, triggerMode: "tap" },
+  ],
+  "clear-input": [
+    { presetId: "recommended", label: "推荐", description: "Ctrl+A → Backspace", keys: { ctrl: true, key: "a" }, triggerMode: "tap", macro: [{ ctrl: true, key: "a" }, { key: "backspace" }] },
+  ],
+  "delete-word": [
+    { presetId: "recommended", label: "推荐", description: "Ctrl+Backspace", keys: { ctrl: true, key: "backspace" }, triggerMode: "tap" },
+  ],
+  slash: [
+    { presetId: "recommended", label: "推荐", description: "输入 /", keys: { shift: true, key: "7" }, triggerMode: "tap", text: "/" },
+  ],
 };
+
+export function bindingSteps(actionId: LockedActionId, binding: ActionBinding): Array<{ keys: KeyCombo }> {
+  if (binding.triggerMode !== "tap" || binding.presetId === "custom") return [{ keys: { ...binding.keys } }];
+  const preset = ACTION_BINDING_PRESETS[actionId].find((candidate) => candidate.presetId === binding.presetId);
+  if (preset?.macro) return preset.macro.map((keys) => ({ keys: { ...keys } }));
+  if (preset?.text !== undefined) return [{ keys: { text: preset.text } }];
+  const count = preset?.tapCount ?? 1;
+  return Array.from({ length: count }, () => ({ keys: { ...binding.keys } }));
+}
 
 export function bindingTapCount(actionId: LockedActionId, binding: ActionBinding): 1 | 2 {
   if (binding.triggerMode !== "tap" || binding.presetId === "custom") return 1;
@@ -105,6 +137,12 @@ export function defaultActionBindings(): ActionBindingsFile {
       voice: copyBinding(ACTION_BINDING_PRESETS.voice[0]),
       esc: copyBinding(ACTION_BINDING_PRESETS.esc[0]),
       enter: copyBinding(ACTION_BINDING_PRESETS.enter[0]),
+      newline: copyBinding(ACTION_BINDING_PRESETS.newline[0]),
+      paste: copyBinding(ACTION_BINDING_PRESETS.paste[0]),
+      "command-menu": copyBinding(ACTION_BINDING_PRESETS["command-menu"][0]),
+      "clear-input": copyBinding(ACTION_BINDING_PRESETS["clear-input"][0]),
+      "delete-word": copyBinding(ACTION_BINDING_PRESETS["delete-word"][0]),
+      slash: copyBinding(ACTION_BINDING_PRESETS.slash[0]),
     },
   };
 }

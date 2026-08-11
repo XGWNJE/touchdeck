@@ -22,17 +22,6 @@
       }
     },
     {
-      "id": "steer",
-      "icon": "zap",
-      "label": "Steer",
-      "sub": "插队提示词",
-      "group": "agent",
-      "keys": {
-        "ctrl": true,
-        "key": "s"
-      }
-    },
-    {
       "id": "esc",
       "icon": "hand",
       "label": "中断",
@@ -54,12 +43,13 @@
       }
     },
     {
-      "id": "backspace",
+      "id": "delete-word",
       "icon": "delete",
-      "label": "退格",
-      "sub": "Backspace",
+      "label": "删词",
+      "sub": "Ctrl+Backspace",
       "group": "edit",
       "keys": {
+        "ctrl": true,
         "key": "backspace"
       }
     },
@@ -74,25 +64,14 @@
       }
     },
     {
-      "id": "plan",
-      "icon": "clipboard-list",
-      "label": "Plan",
-      "sub": "Shift+Tab",
-      "group": "agent",
-      "keys": {
-        "shift": true,
-        "key": "tab"
-      }
-    },
-    {
-      "id": "selectall",
-      "icon": "square-dashed",
-      "label": "全选",
-      "sub": "Ctrl+A",
+      "id": "command-menu",
+      "icon": "slash",
+      "label": "菜单",
+      "sub": "Ctrl+K",
       "group": "agent",
       "keys": {
         "ctrl": true,
-        "key": "a"
+        "key": "k"
       }
     },
     {
@@ -107,17 +86,6 @@
       }
     },
     {
-      "id": "continue",
-      "icon": "play",
-      "label": "继续",
-      "sub": "继续执行",
-      "group": "agent",
-      "macro": [
-        { "paste": "继续" },
-        { "keys": { "key": "enter" } }
-      ]
-    },
-    {
       "id": "clear-input",
       "icon": "eraser",
       "label": "清空",
@@ -127,27 +95,6 @@
         { "keys": { "ctrl": true, "key": "a" } },
         { "keys": { "key": "backspace" } }
       ]
-    },
-    {
-      "id": "at",
-      "icon": "at-sign",
-      "label": "文件",
-      "sub": "引用",
-      "group": "cmd",
-      "keys": {
-        "text": "@"
-      }
-    },
-    {
-      "id": "copy",
-      "icon": "copy",
-      "label": "复制",
-      "sub": "Ctrl+C",
-      "group": "edit",
-      "keys": {
-        "ctrl": true,
-        "key": "c"
-      }
     },
     {
       "id": "paste",

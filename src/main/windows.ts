@@ -20,7 +20,8 @@ function loadRenderer(win: BrowserWindow, page: string): void {
 }
 
 function bubbleAnchor() {
-  const b = wins.bubble!.getBounds();
+  if (!wins.bubble || wins.bubble.isDestroyed()) return null;
+  const b = wins.bubble.getBounds();
   return { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) };
 }
 
@@ -80,10 +81,15 @@ function openMenuWindow(): void {
   loadRenderer(menuWin, "menu");
   menuWin.webContents.on("console-message", (_e, _l, msg) => console.log("[menu]", msg));
   menuWin.webContents.once("did-finish-load", () => {
+    const anchor = bubbleAnchor();
+    if (!anchor || !wins.bubble || wins.bubble.isDestroyed()) {
+      closeMenuWindow();
+      return;
+    }
     console.log("[touchdeck] menu window bounds", JSON.stringify(menuWin.getBounds()));
     menuWin.webContents.send("menu-init", {
-      anchor: bubbleAnchor(),
-      ballSize: wins.bubble!.getBounds().width,
+      anchor,
+      ballSize: wins.bubble.getBounds().width,
       screen: { width: b.width, height: b.height },
     });
   });
@@ -106,8 +112,11 @@ export function closeMenuWindow(): void {
 let tabTimer: NodeJS.Timeout | null = null;
 let tabHoldActive = false;
 export function registerTabShortcut(): void {
+  if (globalShortcut.isRegistered("Tab")) return;
   ensureWin32();
   const ok = globalShortcut.register("Tab", () => {
+    // 本机面板关闭时 Tab 属于前台应用，绝不能创建无锚点菜单或吞掉用户按键。
+    if (panelDisabled() || !wins.bubble || wins.bubble.isDestroyed()) return;
     if (wins.menu && !wins.menu.isDestroyed()) {
       if (tabHoldActive) return;   // 本次按住展开期间的自动重复，忽略
       // 常驻菜单（点球展开的）再按 Tab：收起（键鼠习惯：Esc/Tab 关菜单）
@@ -131,12 +140,13 @@ export function registerTabShortcut(): void {
 }
 
 // ===== 控制台窗口（交互界面：面板启停/P2P 连接）+ 面板管理 =====
-const CONSOLE_WIDTH = 560;
-const CONSOLE_HEIGHT = 620;
+const CONSOLE_WIDTH = 760;
+const CONSOLE_HEIGHT = 880;
 
 export function createConsoleWindow(): void {
   const consoleWin = new BrowserWindow({
     width: CONSOLE_WIDTH, height: CONSOLE_HEIGHT,
+    minWidth: 680, minHeight: 720,
     title: "TouchDeck 控制台",
     icon: APP_ICON,
     autoHideMenuBar: true,
@@ -213,10 +223,15 @@ export function startPanel(): void {
   if (wins.bubble && !wins.bubble.isDestroyed()) wins.bubble.destroy();
   wins.bubble = null;
   createBubbleWindow();
+  registerTabShortcut();
   notifyPanelStatus();
 }
 
 export function stopPanel(): void {
+  globalShortcut.unregister("Tab");
+  if (tabTimer) clearInterval(tabTimer);
+  tabTimer = null;
+  tabHoldActive = false;
   closeMenuWindow();
   if (wins.bubble && !wins.bubble.isDestroyed()) wins.bubble.destroy();
   wins.bubble = null;

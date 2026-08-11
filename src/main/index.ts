@@ -12,7 +12,7 @@ import { registerPeerIpc, releasePeerHoldsForShutdown, startPeer } from "./peer-
 import { registerConfigWatch } from "./hotreload";
 import { pollForeground } from "./foreground";
 import {
-  createConsoleWindow, createTray, registerTabShortcut, registerMenuIpc,
+  createConsoleWindow, createTray, registerMenuIpc,
   startPanel, closeMenuWindow,
 } from "./windows";
 
@@ -59,7 +59,6 @@ app.whenReady().then(() => {
   registerMenuIpc();
   createConsoleWindow();
   createTray();
-  registerTabShortcut();
   registerConfigWatch();
   startPanel(); // 控制台打开时自动按配置启动面板（开箱即用）
 

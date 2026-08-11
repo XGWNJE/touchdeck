@@ -7,7 +7,7 @@ import {
 } from "../shared/config-resolve";
 import { wins, fgCache, scenarioState } from "./state";
 import { loadActionBindings } from "./action-bindings";
-import { bindingTapCount, LOCKED_ACTION_IDS } from "../shared/action-bindings";
+import { ACTION_BINDING_PRESETS, bindingSteps, bindingTapCount, LOCKED_ACTION_IDS, type ActionBinding } from "../shared/action-bindings";
 import {
   ensureWin32, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
   OpenProcess, QueryFullProcessImageNameW, CloseHandle,
@@ -72,13 +72,14 @@ export function currentEffective(): Effective {
     const actionId = button.id as keyof typeof bindings;
     const binding = bindings[actionId];
     const tapCount = bindingTapCount(actionId, binding);
-    const macro = tapCount === 2 ? [{ keys: { ...binding.keys } }, { keys: { ...binding.keys } }] : undefined;
+    const steps = bindingSteps(actionId, binding);
+    const macro = steps.length !== 1 || steps[0].keys.text !== undefined ? steps : undefined;
     return {
       ...button,
       keys: macro ? undefined : { ...binding.keys },
       macro,
       triggerMode: binding.triggerMode,
-      sub: formatBinding(binding.keys, binding.triggerMode, tapCount),
+      sub: formatBinding(actionId, binding, tapCount),
     };
   });
   return {
@@ -89,7 +90,10 @@ export function currentEffective(): Effective {
   };
 }
 
-function formatBinding(keys: import("../shared/config-resolve").KeyCombo, triggerMode: "tap" | "hold", tapCount: 1 | 2): string {
+function formatBinding(actionId: keyof ReturnType<typeof loadActionBindings>["bindings"], binding: ActionBinding, tapCount: 1 | 2): string {
+  const { keys, triggerMode } = binding;
+  const preset = ACTION_BINDING_PRESETS[actionId].find((candidate) => candidate.presetId === binding.presetId);
+  if (preset?.description && binding.presetId !== "custom") return `${preset.description} · ${triggerMode === "hold" ? "按住" : "单击"}`;
   const parts = [keys.ctrl && "Ctrl", keys.shift && "Shift", keys.alt && "Alt", keys.win && "Win", keys.key].filter(Boolean);
   return `${parts.join("+")}${tapCount === 2 ? " ×2" : ""} · ${triggerMode === "hold" ? "按住" : "单击"}`;
 }

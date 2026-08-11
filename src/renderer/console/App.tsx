@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
 interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; revokingDevices?: boolean; revokeError?: string; devicesRevoked?: boolean; }
-type ActionId = "voice" | "esc" | "enter";
+type ActionId = "voice" | "esc" | "enter" | "newline" | "paste" | "command-menu" | "clear-input" | "delete-word" | "slash";
 interface Binding { presetId: string; keys: Record<string, boolean | string>; triggerMode: "tap" | "hold"; }
 interface BindingsData { schemaVersion: 1; bindings: Record<ActionId, Binding>; }
 interface Preset extends Binding { label: string; description: string; }
@@ -39,7 +39,6 @@ export default function App() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
   const [p2pBusy, setP2pBusy] = useState(false);
-  const [bindingOpen, setBindingOpen] = useState(false);
   const [bindings, setBindings] = useState<BindingsData | null>(null);
   const [presets, setPresets] = useState<Record<ActionId, Preset[]> | null>(null);
   const [bindingBusy, setBindingBusy] = useState(false);
@@ -228,9 +227,8 @@ export default function App() {
   }
 
   return (
-    <div className="p-[18px]">
-      <h1 className="text-[19px] mb-0.5">TouchDeck 控制台</h1>
-      <div className="text-[#888] text-xs mb-3.5">本机面板 + P2P 远程连接的统一入口</div>
+    <div className="p-[18px] max-w-[920px] mx-auto">
+      <h1 className="text-[19px] mb-3">TouchDeck</h1>
 
       {/* 顶部状态总览 */}
       <div className="flex gap-[18px] bg-[#1e1e24] border border-[#33333a] rounded-[10px] px-3.5 py-2.5 mb-3.5">
@@ -244,8 +242,7 @@ export default function App() {
       </div>
 
       <div className={card}>
-        <h2 className="text-sm font-semibold mb-1">本机面板</h2>
-        <div className="text-[#888] text-xs mb-2.5 leading-relaxed">悬浮球快捷键面板（键鼠交互：点球或按住 Tab 展开）。远程端（手机、平板）在用时，可关闭本机面板避免重复。</div>
+        <h2 className="text-sm font-semibold mb-2">Windows 悬浮菜单</h2>
         <div className="flex items-center gap-2.5">
           <span className="text-[#ccc] flex-1 text-[13px]">{panel.panelRunning ? "运行中" : panel.panelDisabled ? "已关闭" : "未运行"}</span>
           <button className={btnMain} disabled={panelBusy} onClick={togglePanel}>
@@ -255,16 +252,14 @@ export default function App() {
       </div>
 
       <div className={card}>
-        <button className="w-full flex items-center text-left cursor-pointer" onClick={() => setBindingOpen((open) => !open)}>
-          <span className="flex-1"><span className="block text-sm font-semibold">动作绑定</span><span className="block text-[#888] text-xs mt-1">语音、中断、发送的预设、自定义组合键与触发模式</span></span>
-          <span className="text-[#888]">{bindingOpen ? "收起" : "设置"}</span>
-        </button>
-        {bindingOpen && bindings && presets && (
-          <div className="mt-3 pt-3 border-t border-[#33333a]">
-            {(["voice", "esc", "enter"] as ActionId[]).map((actionId) => {
+        <div className="flex items-center mb-3"><h2 className="text-sm font-semibold flex-1">动作</h2><span className="text-[#888] text-xs">9 个常用动作</span></div>
+        {bindings && presets && (
+          <div>
+            <div className="grid grid-cols-2 gap-2.5">
+            {(["voice", "esc", "enter", "newline", "paste", "command-menu", "clear-input", "delete-word", "slash"] as ActionId[]).map((actionId) => {
               const binding = bindings.bindings[actionId];
-              const names = { voice: "语音", esc: "中断", enter: "发送" };
-              return <div key={actionId} className="mb-3 p-2.5 bg-[#1b1b20] rounded-lg border border-[#33333a]">
+              const names: Record<ActionId, string> = { voice: "语音", esc: "中断", enter: "发送", newline: "换行", paste: "粘贴", "command-menu": "命令菜单", "clear-input": "清空输入", "delete-word": "按词删除", slash: "/ 命令" };
+              return <div key={actionId} className="p-2.5 bg-[#1b1b20] rounded-lg border border-[#33333a]">
                 <div className="flex items-center gap-2 mb-2"><strong className="text-sm flex-1">{names[actionId]}</strong><button className="text-xs text-[#9ac8ff] cursor-pointer" onClick={() => resetBinding(actionId)}>恢复</button></div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <select className="bg-[#27272d] border border-[#44444d] rounded px-2 py-1.5 text-xs" value={binding.presetId} onChange={(e) => choosePreset(actionId, e.target.value)}>
@@ -283,14 +278,14 @@ export default function App() {
                 </div>}
               </div>;
             })}
-            <div className="flex gap-2 justify-end"><button className={btnDanger} onClick={resetAllBindings}>全部恢复</button><button className={btnMain} disabled={bindingBusy} onClick={() => saveBindings()}>{bindingBusy ? "保存中…" : "保存并同步"}</button></div>
+            </div>
+            <div className="flex gap-2 justify-end mt-3"><button className={btnDanger} onClick={resetAllBindings}>全部恢复</button><button className={btnMain} disabled={bindingBusy} onClick={() => saveBindings()}>{bindingBusy ? "保存中…" : "保存并同步"}</button></div>
           </div>
         )}
       </div>
 
       <div className={card}>
-        <h2 className="text-sm font-semibold mb-1">远程连接（P2P 直连）</h2>
-        <div className="text-[#888] text-xs mb-2.5 leading-relaxed">Android 手机或平板输入房间码即可直连本机，按键不经过公网转发。</div>
+        <h2 className="text-sm font-semibold mb-2">手机直连</h2>
         <div className="flex items-center gap-2.5 mb-2">
           <Dot ok={p2pDotOk} />
           <span className="text-[#ccc] flex-1 text-[13px]">{p2pLabel}</span>
@@ -314,11 +309,11 @@ export default function App() {
             <span className={`text-[#4ade80] text-xs flex-none ${copiedKey ? "" : "hidden"}`}>已复制</span>
           </div>
         )}
-        {p2p.pairingKey && <div className="text-[#888] text-xs mb-1.5">首次配对密钥 5 分钟内仅可使用一次，手机输入后即失效。</div>}
+        {p2p.pairingKey && <div className="text-[#888] text-xs mb-1.5">密钥 5 分钟内仅可使用一次。</div>}
         {p2p.code && !p2p.pairingKey && (
           <div className="flex items-center gap-2.5 my-2">
             <span className="text-[#888] text-xs flex-1">
-              添加另一台手机或平板时，为新设备生成一枚一次性密钥；已配对设备不受影响。
+              新设备需要新密钥。
             </span>
             <button className={btnMain} disabled={p2p.pairingPending} onClick={createPairKey}>
               {p2p.pairingPending ? "正在生成…" : "添加另一台设备"}
@@ -327,10 +322,10 @@ export default function App() {
         )}
         {p2p.pairingError && <div className="text-[#f87171] text-xs mb-1.5">配对密钥生成失败：{pairingErrorText[p2p.pairingError] || p2p.pairingError}</div>}
         {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
-        <div className="text-[#888] text-xs">首次连接需在手机输入房间码和配对密钥；已配对设备可跨信令重启使用续连凭据恢复连接。</div>
+        <div className="text-[#888] text-xs">首次连接输入房间码和配对密钥。</div>
         {p2p.code && (
           <div className="flex items-center gap-2.5 mt-3 pt-3 border-t border-[#33333a]">
-            <span className="text-[#777] text-xs flex-1">“关闭连接”只结束本次会话；需要取消设备授权时使用右侧按钮。</span>
+            <span className="text-[#777] text-xs flex-1">取消设备授权</span>
             <button className={btnDanger} disabled={p2p.revokingDevices} onClick={revokeDevices}>
               {p2p.revokingDevices ? "正在撤销…" : "忘记全部设备"}
             </button>

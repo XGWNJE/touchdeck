@@ -97,20 +97,10 @@
       "triggerMode": "tap"
     },
     {
-      "id": "steer",
-      "icon": "zap",
-      "label": "Steer",
-      "sub": "插队提示词",
-      "group": "agent",
-      "confirm": false,
-      "aux": false,
-      "triggerMode": "tap"
-    },
-    {
-      "id": "backspace",
+      "id": "delete-word",
       "icon": "delete",
-      "label": "退格",
-      "sub": "Backspace",
+      "label": "删词",
+      "sub": "Ctrl+Backspace",
       "group": "edit",
       "confirm": false,
       "aux": false,
@@ -127,20 +117,10 @@
       "triggerMode": "tap"
     },
     {
-      "id": "plan",
-      "icon": "clipboard-list",
-      "label": "Plan",
-      "sub": "Shift+Tab",
-      "group": "agent",
-      "confirm": false,
-      "aux": false,
-      "triggerMode": "tap"
-    },
-    {
-      "id": "selectall",
-      "icon": "square-dashed",
-      "label": "全选",
-      "sub": "Ctrl+A",
+      "id": "command-menu",
+      "icon": "slash",
+      "label": "菜单",
+      "sub": "Ctrl+K",
       "group": "agent",
       "confirm": false,
       "aux": false,
@@ -157,40 +137,10 @@
       "triggerMode": "tap"
     },
     {
-      "id": "continue",
-      "icon": "play",
-      "label": "继续",
-      "sub": "继续执行",
-      "group": "agent",
-      "confirm": false,
-      "aux": false,
-      "triggerMode": "tap"
-    },
-    {
       "id": "clear-input",
       "icon": "eraser",
       "label": "清空",
       "sub": "清空输入框",
-      "group": "edit",
-      "confirm": false,
-      "aux": false,
-      "triggerMode": "tap"
-    },
-    {
-      "id": "at",
-      "icon": "at-sign",
-      "label": "文件",
-      "sub": "引用",
-      "group": "cmd",
-      "confirm": false,
-      "aux": false,
-      "triggerMode": "tap"
-    },
-    {
-      "id": "copy",
-      "icon": "copy",
-      "label": "复制",
-      "sub": "Ctrl+C",
       "group": "edit",
       "confirm": false,
       "aux": false,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  bindingSteps,
   bindingTapCount,
   canonicalKeyCombo,
   defaultActionBindings,
@@ -20,6 +21,18 @@ test("defaults lock voice to Codex hold and esc/enter to tap", () => {
   assert.equal(bindingTapCount("esc", defaults.bindings.esc), 2);
   assert.equal(defaults.bindings.enter.triggerMode, "tap");
   assert.equal(bindingTapCount("enter", defaults.bindings.enter), 1);
+  assert.equal(Object.keys(defaults.bindings).length, 9);
+  assert.deepEqual(bindingSteps("clear-input", defaults.bindings["clear-input"]), [
+    { keys: { ctrl: true, key: "a" } },
+    { keys: { key: "backspace" } },
+  ]);
+  assert.deepEqual(bindingSteps("slash", defaults.bindings.slash), [{ keys: { text: "/" } }]);
+  assert.deepEqual(bindingSteps("delete-word", defaults.bindings["delete-word"]), [{ keys: { ctrl: true, key: "backspace" } }]);
+});
+
+test("custom binding never inherits a preset macro or text injection", () => {
+  assert.deepEqual(bindingSteps("clear-input", { presetId: "custom", keys: { ctrl: true, key: "l" }, triggerMode: "tap" }), [{ keys: { ctrl: true, key: "l" } }]);
+  assert.deepEqual(bindingSteps("slash", { presetId: "custom", keys: { key: "s" }, triggerMode: "tap" }), [{ keys: { key: "s" } }]);
 });
 
 test("Codex interrupt repeats only for the recommended preset", () => {
