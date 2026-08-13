@@ -6,16 +6,20 @@
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: transparent;
     font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  /* 展开动画（2026-08-14 修订）：逐环逐项涌现由 canvas 内每项缩放+淡入承担，
+     stage 不再整体缩放（避免两层缩放叠加）；只保留整体淡入且明显加快 */
   #stage {
     position: absolute; left: 0; top: 0;
     transform-origin: var(--px, 0) var(--py, 0);
-    opacity: 0; transform: scale(.5) rotate(-18deg);
-    transition: transform .32s cubic-bezier(.22, 1.6, .36, 1), opacity .25s;
+    opacity: 0;
+    transition: opacity .12s;
   }
-  #stage.open { opacity: 1; transform: scale(1) rotate(0deg); }
+  #stage.open { opacity: 1; }
   canvas { display: block; }
   /* 球芯独立层：不参与 stage 弹出缩放，尺寸 = 悬浮球实际球径（ballSize-8），
-     保证菜单展开前后球大小完全一致（2026-08-13 修正：原来画在 canvas 里随 stage 缩放且偏大 8px） */
+     保证菜单展开前后球大小完全一致（2026-08-13 修正：原来画在 canvas 里随 stage 缩放且偏大 8px）。
+     直接显示、不做淡入（2026-08-14 修正）：hub 与悬浮球同色同形，展开时若淡入会与
+     下层半透明球叠加成两层叠影（边缘毛糙、不圆）；立即不透明显示即无缝衔接 */
   #hub {
     position: absolute; border-radius: 50%;
     background: #f4f4f6;

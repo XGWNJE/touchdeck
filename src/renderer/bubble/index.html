@@ -11,9 +11,17 @@
     background: #f4f4f6;
     box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
     opacity: .62;
-    transition: opacity .15s, transform .1s;
+    /* 透明度过渡统一 60ms（2026-08-14）：淡入淡出必须与主进程 BUBBLE_FADE_MS 同步，
+       否则淡入回到默认 150ms，主进程 60ms 后就展开菜单，hub 盖在半透明球上叠影 */
+    transition: opacity .06s, transform .1s;
   }
   body.pressed #ball { opacity: .85; transform: scale(.94); }
+  /* 侧键传送淡出态（2026-08-14）：透明度过渡只在此态压缩到 60ms（与主进程
+     BUBBLE_FADE_MS 同步），位移过程更干脆；常规 pressed/armed 过渡不受影响 */
+  body.fading #ball {
+    opacity: 0;
+    transition: opacity .06s, transform .06s;
+  }
   /* 长按进度环：SVG 圆头弧线随进度走满 HOLD_MS；armed 后整环常亮。
      环铺满窗口（viewBox 100，圆 r=48、3px 圆头描边），紧贴球外缘不外扩——
      外扩发光会被球尺寸窗口裁切，不做外发光。

@@ -5,8 +5,8 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen,
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "../shared/config-resolve";
-import { ROOT, wins, loadState, saveState, isPositionUsable, clampToWorkArea } from "./state";
-import { ensureWin32, GetAsyncKeyState } from "./win32";
+import { ROOT, wins, hwndOf, loadState, saveState, isPositionUsable, clampToWorkArea } from "./state";
+import { ensureWin32, GetAsyncKeyState, SetWindowPos } from "./win32";
 import { enqueueAction } from "./macro";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +25,9 @@ function loadRenderer(win: BrowserWindow, page: string): void {
 function bubbleAnchor() {
   if (!wins.bubble || wins.bubble.isDestroyed()) return null;
   const b = wins.bubble.getBounds();
-  return { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) };
+  // 浮点中心（不 round）：菜单 hub 定位用浮点，与球渲染位置严格重合，
+  // 取整会让 hub 与球错开 ±0.5px，在非 100% DPI 下放大成"两层球"观感（2026-08-14 修复）
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
 function createBubbleWindow(): void {
@@ -69,7 +71,11 @@ function createBubbleWindow(): void {
   console.log("[touchdeck] bubble window", JSON.stringify(bubbleWin.getBounds()));
 }
 
-function openMenuWindow(): void {
+// 打开全屏透明菜单窗口；anchorOverride 存在时以该点（如鼠标当前位置）为锚点展开，
+// 否则以悬浮球中心为锚点。菜单展开期间不隐藏悬浮球：锚点=球位置时由 hub 球芯
+// 覆盖显示、视觉一致（2026-08-14 修订：原先 hide 球，侧键场景锚点≠球位置会抖动；
+// 现在侧键触发前先把球移动到鼠标位置，锚点恒等于球位置，无需 hide）。
+function openMenuWindow(anchorOverride?: { x: number; y: number }): void {
   if (wins.menu && !wins.menu.isDestroyed()) return;
   const b = screen.getPrimaryDisplay().bounds;
   const menuWin = new BrowserWindow({
@@ -84,11 +90,14 @@ function openMenuWindow(): void {
   loadRenderer(menuWin, "menu");
   menuWin.webContents.on("console-message", (_e, _l, msg) => console.log("[menu]", msg));
   menuWin.webContents.once("did-finish-load", () => {
-    const anchor = bubbleAnchor();
+    const anchor = anchorOverride ?? bubbleAnchor();
     if (!anchor || !wins.bubble || wins.bubble.isDestroyed()) {
       closeMenuWindow();
       return;
     }
+    // 菜单展开期间球保持可见：hub 球芯与球同尺寸同色、锚点与球中心严格重合（浮点），
+    // 不透明 hub 完全盖住半透明球 → 视觉上只有一个圆（2026-08-14 修复：此前 hide 球，
+    // hide 与 hub 显示存在时序缝隙，表现为"球出现后又位移"；不隐藏则无缝衔接）。
     console.log("[touchdeck] menu window bounds", JSON.stringify(menuWin.getBounds()));
     menuWin.webContents.send("menu-init", {
       anchor,
@@ -104,7 +113,8 @@ export function closeMenuWindow(): void {
   }
   wins.menu = null;
   // 菜单销毁后立即把球拉回置顶层顶部，不等下个轮询周期
-  // （菜单窗口与球同为置顶，后创建的菜单会排在球前；收起后球须恢复最上层）
+  // （菜单窗口与球同为置顶，后创建的菜单会排在球前；收起后球须恢复最上层。
+  //  球在菜单展开期间保持可见（被不透明 hub 精确覆盖），无需 show）
   if (wins.bubble && !wins.bubble.isDestroyed()) {
     wins.bubble.setAlwaysOnTop(true, "screen-saver");
   }
@@ -233,11 +243,13 @@ export function startPanel(): void {
   createBubbleWindow();
   registerTabShortcut();
   startTopmostKeepAlive();
+  startXButton2Watch();
   notifyPanelStatus();
 }
 
 export function stopPanel(): void {
   stopTopmostKeepAlive();
+  stopXButton2Watch();
   globalShortcut.unregister("Tab");
   if (tabTimer) clearInterval(tabTimer);
   tabTimer = null;
@@ -271,6 +283,89 @@ function stopTopmostKeepAlive(): void {
     clearInterval(topmostTimer);
     topmostTimer = null;
   }
+}
+
+// ===== 鼠标侧键展开菜单（2026-08-14，v0.3.2）=====
+// 无键盘时用鼠标前进键（XButton2, VK 0x06）展开/收起菜单。触发展开时把悬浮球
+// 传送到鼠标当前位置（淡出→移动→淡入），菜单以球中心为锚点展开——球保留在新位置，
+// 不再回到原位（2026-08-14 修订：原实现菜单锚点=鼠标但球留在原处并 hide，视觉抖动；
+// 现改为移动球本身，锚点恒等于球位置，无 hide 也就无抖动）。
+// 轮询 GetAsyncKeyState 检测下降沿（本帧按下且上帧未按下），避免长按/自动重复误触发；
+// 只在本机鼠标场景生效（UU 触控注入读不到按键状态，且侧键本就只存在于真实鼠标）。
+// 菜单在别处展开（点球/Tab）时侧键同样可收起：语义 = toggle。
+let x2Timer: NodeJS.Timeout | null = null;
+let x2PrevDown = false;
+const XBUTTON2_POLL_MS = 25;
+const BUBBLE_FADE_MS = 60;  // 球淡出/淡入时长（渲染端 fading 态 transition 同步为 60ms）
+
+// 把悬浮球淡出→移动到指定位置→淡入；移动完成回调在淡入**完全结束**后触发。
+// 移动用 Win32 SetWindowPos（物理像素换算）：透明窗口上 Electron setPosition 移动
+// 会残留旧位置伪影（drag.ts 注释已记载），表现为"旧位置留半个球、新位置出现球"
+// 的两层观感（2026-08-14 实证）；SetWindowPos 是拖拽已验证的无伪影路径。
+// done 必须等淡入结束：若在淡入中途就展开菜单，扇区动画会盖在尚未稳定的球上。
+function teleportBubble(x: number, y: number, done?: () => void): void {
+  const w = wins.bubble;
+  if (!w || w.isDestroyed()) { done?.(); return; }
+  ensureWin32();
+  const hwnd = hwndOf(w);
+  const scale = screen.getDisplayNearestPoint({ x, y }).scaleFactor || 1;
+  w.webContents.send("bubble-fade", false);            // 淡出
+  setTimeout(() => {
+    if (w.isDestroyed()) { done?.(); return; }
+    SetWindowPos(hwnd, 0, Math.round(x * scale), Math.round(y * scale), 0, 0, 0x0215);
+    saveState({ x, y });                               // 球保留在新位置，重启恢复同位置
+    setTimeout(() => {
+      if (w.isDestroyed()) { done?.(); return; }
+      w.webContents.send("bubble-fade", true);         // 淡入
+      setTimeout(() => done?.(), BUBBLE_FADE_MS);      // 等淡入完全结束再回调
+    }, BUBBLE_FADE_MS);
+  }, BUBBLE_FADE_MS);
+}
+
+// 侧键展开的锚点：openMenuWindow 内部用 bubbleAnchor() 读取传送后的球实际中心（浮点），
+// 菜单 hub 与球严格重合，不产生叠影（2026-08-14 修复）
+
+function startXButton2Watch(): void {
+  if (x2Timer) return;
+  ensureWin32();
+  x2Timer = setInterval(() => {
+    if (panelDisabled() || !wins.bubble || wins.bubble.isDestroyed()) return;
+    const down = !!(GetAsyncKeyState(0x06) & 0x8000);
+    const edge = down && !x2PrevDown;
+    x2PrevDown = down;
+    if (!edge) return;
+    if (wins.menu && !wins.menu.isDestroyed()) {
+      // 菜单已展开时再按侧键：看鼠标是否还在球上
+      const pt = screen.getCursorScreenPoint();
+      const b = wins.bubble.getBounds();
+      const onBall = pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height;
+      if (onBall) {
+        closeMenuWindow();   // 鼠标还在球上：直接收起菜单
+      } else {
+        // 鼠标已移走：收起当前菜单，把球传送到新鼠标位置，以球实际中心为锚点重新展开
+        closeMenuWindow();
+        const [bw, bh] = wins.bubble.getSize();
+        const [tx, ty] = clampToWorkArea(Math.round(pt.x - bw / 2), Math.round(pt.y - bh / 2), bw, bh);
+        teleportBubble(tx, ty, () => openMenuWindow());
+      }
+      return;
+    }
+    // 展开：球传送到鼠标位置（夹取在工作区内）后，以球实际中心为锚点展开菜单。
+    // 不传 anchorOverride：openMenuWindow 内部用 bubbleAnchor() 读取传送后的 getBounds，
+    // 锚点永远等于球实际中心（浮点），菜单 hub 与球严格重合（2026-08-14 修复）
+    const pt = screen.getCursorScreenPoint();
+    const [bw, bh] = wins.bubble.getSize();
+    const [tx, ty] = clampToWorkArea(Math.round(pt.x - bw / 2), Math.round(pt.y - bh / 2), bw, bh);
+    teleportBubble(tx, ty, () => openMenuWindow());
+  }, XBUTTON2_POLL_MS);
+}
+
+function stopXButton2Watch(): void {
+  if (x2Timer) {
+    clearInterval(x2Timer);
+    x2Timer = null;
+  }
+  x2PrevDown = false;
 }
 
 // 菜单开关：必须只注册一次（曾挂在 createBubbleWindow 里，面板每次重建都叠加监听，

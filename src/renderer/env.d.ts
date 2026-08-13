@@ -6,6 +6,7 @@ export interface TouchdeckApi {
   startDrag(): void;
   stopDrag(): void;
   onDragEnded(cb: () => void): void;
+  onBubbleFade(cb: (visible: boolean) => void): void;
   debugShot(): Promise<void>;
   closeMenu(): void;
   toggleMenu(): void;

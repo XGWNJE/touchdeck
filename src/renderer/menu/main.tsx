@@ -1,6 +1,8 @@
 // 径向菜单（Windows 版，复刻安卓 RadialMenuView）：
 // 等面积分环（弧长/环厚恒定）+ 逐槽完整可见性检查（放不下顺延外环）+
 // C 皮肤（黑透底、发丝线、选中青色发光三描边近似）。键鼠交互：hover 高亮 + 左击/松 Tab 确认。
+// 展开动画（2026-08-14，v0.3.2）：由内向外逐环涌现，环内各项随机小延迟错开，
+// 单项快速淡入放大；整体节奏快于旧的整体缩放弹出。
 // React 壳：canvas 全部命令式绘制（ref 持有），状态变化即 draw()，不走 React 重渲染。
 import React, { useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -9,12 +11,26 @@ const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 const CYAN = "rgba(34, 211, 238, 1)";
 
-interface MenuSlot { inner: number; outer: number; a0: number; a1: number; item: any; }
+// ---- 展开动画参数（2026-08-14）----
+const RING_STAGGER_MS = 45;   // 环间延迟：外环比内环晚 RING_STAGGER
+const ITEM_JITTER_MS = 38;    // 环内随机抖动上限：同级各项错开出现
+const ITEM_DURATION_MS = 150; // 单项出现时长（淡入 + 放大），快
+const ITEM_SCALE_FROM = 0.6;  // 单项起始缩放（围绕球心）
+
+interface MenuSlot {
+  inner: number; outer: number; a0: number; a1: number; item: any;
+  animDelay: number;   // 相对动画起点的延迟 ms（环序 + 环内随机）
+}
 interface MenuState { cx: number; cy: number; slots: MenuSlot[]; }
 interface InitPayload { anchor: { x: number; y: number }; ballSize?: number; screen: { width: number; height: number }; }
 
 function withAlpha(color: string, alpha: number): string {
   return color.replace(/[\d.]+\)$/, alpha + ")");
+}
+
+// easeOutCubic：先快后慢，单项出现有"落定"感
+function easeOutCubic(p: number): number {
+  return 1 - Math.pow(1 - p, 3);
 }
 
 function Menu() {
@@ -34,6 +50,9 @@ function Menu() {
     const iconCache = new Map<string, HTMLImageElement | null>();
     let flashTimer: ReturnType<typeof setTimeout> | null = null;
     let ballSize = 103;          // 初始球直径（菜单展开时球芯按同尺寸绘制，视觉一致）
+    // 展开动画状态（2026-08-14）：animStart 为动画起点时间戳；rAF 驱动逐帧 draw(now)
+    let animStart: number | null = null;
+    let animRaf = 0;
 
     function setSize(w: number, h: number) {
       const dpr = window.devicePixelRatio || 1;
@@ -82,7 +101,9 @@ function Menu() {
           if (idx >= buttons.length) break;
           const a0 = start + per * s, a1 = a0 + per;
           if (slotButtonVisible(cx, cy, inner, outer, a0, a1, screen, visMargin)) {
-            slots.push({ inner, outer, a0, a1, item: buttons[idx] });
+            // 展开延迟 = 环序延迟（由内向外）+ 环内随机抖动（同级各项错开）
+            const animDelay = ring * RING_STAGGER_MS + Math.random() * ITEM_JITTER_MS;
+            slots.push({ inner, outer, a0, a1, item: buttons[idx], animDelay });
             idx++; usable++;
           }
         }
@@ -131,9 +152,13 @@ function Menu() {
       return -1;
     }
 
-    function draw() {
+    function draw(animNow?: number) {
       if (!state) return;
       const { cx, cy, slots } = state;
+      // 动画活跃期间（animRaf 未停）交互重绘也按当前时间算进度，避免高亮与动画态打架；
+      // 动画结束后 animStart 置 null，此后一律常态绘制
+      if (animNow === undefined && animRaf !== 0 && animStart !== null) animNow = performance.now();
+      const animating = animNow !== undefined && animStart !== null;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.translate(cx, cy);
@@ -144,10 +169,24 @@ function Menu() {
         const s = slots[i];
         const a0 = s.a0, a1 = s.a1;
         const pressed = i === pressedIndex;
+        // 展开动画（2026-08-14）：每项按 (now - start - animDelay) 计算进度，
+        // 由内环到外环、环内随机错开涌现；单项围绕球心缩放 + 淡入
+        let k = 1, alpha = 1;
+        if (animating) {
+          const p = Math.min(1, Math.max(0, (animNow! - animStart! - s.animDelay) / ITEM_DURATION_MS));
+          const e = easeOutCubic(p);
+          k = ITEM_SCALE_FROM + (1 - ITEM_SCALE_FROM) * e;
+          alpha = e;
+        }
+
         const path = new Path2D();
         path.arc(0, 0, s.outer, a0 * DEG, a1 * DEG);
         path.arc(0, 0, s.inner, a1 * DEG, a0 * DEG, true);
         path.closePath();
+
+        ctx.save();
+        ctx.scale(k, k);                              // 围绕球心（已 translate）缩放涌现
+        ctx.globalAlpha = alpha;
 
         ctx.fillStyle = "rgba(0,0,0,0.65)";          // 黑透底：只压暗菜单自身区域
         ctx.fill(path);
@@ -182,6 +221,8 @@ function Menu() {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(s.item.label, dirX * rLabel, dirY * rLabel + 4);
+
+        ctx.restore();
       }
       ctx.restore();
     }
@@ -207,6 +248,7 @@ function Menu() {
     }
 
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;   // 只响应主键；侧键（XButton）由主进程轮询处理
       const i = hit(e.screenX, e.screenY);
       if (i !== pressedIndex) { pressedIndex = i; draw(); }
     };
@@ -216,6 +258,7 @@ function Menu() {
       if (i !== pressedIndex) { pressedIndex = i; draw(); }
     };
     const onPointerUp = (e: PointerEvent) => {
+      if (e.button !== 0) return;   // 只响应主键，侧键松手不误触发确认
       confirmAt(e.screenX, e.screenY);
     };
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -274,10 +317,21 @@ function Menu() {
       hub.style.height = hubSize + "px";
       hub.style.left = (anchor.x - hubSize / 2) + "px";
       hub.style.top = (anchor.y - hubSize / 2) + "px";
-      requestAnimationFrame(() => stage.classList.add("open"));
+      requestAnimationFrame(() => {
+        stage.classList.add("open");
+      });
 
       for (const s of state.slots) loadIcon(s.item.icon);
-      draw();
+      // 展开动画（2026-08-14）：rAF 驱动逐帧 draw(now)，最外环全部完成后停帧回到常态
+      if (animRaf) cancelAnimationFrame(animRaf);
+      animStart = performance.now();
+      const totalAnimMs = Math.max(...state.slots.map(s => s.animDelay)) + ITEM_DURATION_MS;
+      const tick = (now: number) => {
+        draw(now);
+        if (now - animStart! < totalAnimMs) animRaf = requestAnimationFrame(tick);
+        else { animRaf = 0; animStart = null; draw(); }   // 完成：animStart 置 null，常态重绘
+      };
+      animRaf = requestAnimationFrame(tick);
     }
 
     window.touchdeck.onMenuInit((init) => {

@@ -29,6 +29,7 @@ function Bubble() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;   // 只响应主键；侧键（XButton）由主进程轮询处理，不触发球按压
       s.pressed = true;
       s.dragging = false;
       body.classList.add("pressed");
@@ -86,6 +87,18 @@ function Bubble() {
       s.pressed = false;
       clearHold();
       s.dragging = false;
+    });
+
+    // 侧键传送淡入淡出（2026-08-14）：主进程移动球前发 false（淡出）、移动后发 true（淡入），
+    // 透明度过渡由 #ball 的 CSS transition 承担；淡出期间禁止交互（球在移动中）
+    window.touchdeck.onBubbleFade((visible: boolean) => {
+      body.classList.toggle("fading", !visible);
+      if (visible) {
+        body.classList.remove("pressed", "armed", "holding");
+        s.pressed = false;
+        clearHold();
+        s.dragging = false;
+      }
     });
 
     return () => {

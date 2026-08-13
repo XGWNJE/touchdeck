@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("touchdeck", {
   startDrag: () => ipcRenderer.send("start-drag"),
   stopDrag: () => ipcRenderer.send("stop-drag"),
   onDragEnded: (cb: () => void) => ipcRenderer.on("drag-ended", () => cb()),
+  // 侧键传送：主进程移动球前后通知渲染端淡出/淡入（false=淡出, true=淡入）
+  onBubbleFade: (cb: (visible: boolean) => void) => ipcRenderer.on("bubble-fade", (_e: IpcRendererEvent, visible: boolean) => cb(visible)),
   debugShot: () => ipcRenderer.invoke("debug-shot"),
   // 悬浮球模式（bubble / menu）
   closeMenu: () => ipcRenderer.send("close-menu"),
