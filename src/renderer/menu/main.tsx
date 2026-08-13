@@ -36,7 +36,6 @@ function easeOutCubic(p: number): number {
 function Menu() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hubRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -163,8 +162,7 @@ function Menu() {
       ctx.save();
       ctx.translate(cx, cy);
 
-      // 球芯由独立 DOM 层 #hub 渲染（不参与 stage 弹出缩放，尺寸=悬浮球实际球径），
-      // 覆盖菜单窗口下被环遮挡的球，避免"球变小/变大"的观感（2026-08-13 修正）
+      // 中心保持透明，直接透出下层真实悬浮球；菜单窗口不再复制第二个球芯。
       for (let i = 0; i < slots.length; i++) {
         const s = slots[i];
         const a0 = s.a0, a1 = s.a1;
@@ -249,17 +247,17 @@ function Menu() {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;   // 只响应主键；侧键（XButton）由主进程轮询处理
-      const i = hit(e.screenX, e.screenY);
+      const i = hit(e.clientX, e.clientY);
       if (i !== pressedIndex) { pressedIndex = i; draw(); }
     };
     const onPointerMove = (e: PointerEvent) => {
       // 悬停也更新高亮（键鼠模式 hover 待选中；按下时由 pressedIndex 驱动，两模式通用）
-      const i = hit(e.screenX, e.screenY);
+      const i = hit(e.clientX, e.clientY);
       if (i !== pressedIndex) { pressedIndex = i; draw(); }
     };
     const onPointerUp = (e: PointerEvent) => {
       if (e.button !== 0) return;   // 只响应主键，侧键松手不误触发确认
-      confirmAt(e.screenX, e.screenY);
+      confirmAt(e.clientX, e.clientY);
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
@@ -309,14 +307,6 @@ function Menu() {
       setSize(screen.width, screen.height);
       stage.style.setProperty("--px", anchor.x + "px");
       stage.style.setProperty("--py", anchor.y + "px");
-      // 球芯独立层：尺寸 = 悬浮球实际球径（ballSize-8，球 CSS inset 4px），
-      // 绝对定位居中于锚点，不随 stage 缩放 → 展开前后球大小完全一致
-      const hub = hubRef.current!;
-      const hubSize = Math.max(1, ballSize - 8);
-      hub.style.width = hubSize + "px";
-      hub.style.height = hubSize + "px";
-      hub.style.left = (anchor.x - hubSize / 2) + "px";
-      hub.style.top = (anchor.y - hubSize / 2) + "px";
       requestAnimationFrame(() => {
         stage.classList.add("open");
       });
@@ -353,7 +343,6 @@ function Menu() {
 
   return (
     <>
-      <div id="hub" ref={hubRef}></div>
       <div id="stage" ref={stageRef}><canvas id="cv" ref={canvasRef}></canvas></div>
       <div id="flash" ref={flashRef}></div>
     </>

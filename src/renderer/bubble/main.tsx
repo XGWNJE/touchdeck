@@ -89,17 +89,34 @@ function Bubble() {
       s.dragging = false;
     });
 
-    // 侧键传送淡入淡出（2026-08-14）：主进程移动球前发 false（淡出）、移动后发 true（淡入），
-    // 透明度过渡由 #ball 的 CSS transition 承担；淡出期间禁止交互（球在移动中）
-    window.touchdeck.onBubbleFade((visible: boolean) => {
-      body.classList.toggle("fading", !visible);
+    // 侧键传送淡入淡出：以 opacity transitionend 回执主进程，避免固定定时器早于 DWM 绘制提交。
+    window.touchdeck.onBubbleFade((visible: boolean, requestId: string) => {
+      const wantsFading = !visible;
+      const alreadyThere = body.classList.contains("fading") === wantsFading;
+      let settled = false;
+      let fallback: ReturnType<typeof setTimeout> | null = null;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (fallback) clearTimeout(fallback);
+        ball.removeEventListener("transitionend", onTransitionEnd);
+        window.touchdeck.bubbleFadeComplete(requestId);
+      };
+      const onTransitionEnd = (event: TransitionEvent) => {
+        if (event.target === ball && event.propertyName === "opacity") finish();
+      };
+      ball.addEventListener("transitionend", onTransitionEnd);
+      body.classList.toggle("fading", wantsFading);
       if (visible) {
         body.classList.remove("pressed", "armed", "holding");
         s.pressed = false;
         clearHold();
         s.dragging = false;
       }
+      if (alreadyThere) requestAnimationFrame(() => requestAnimationFrame(finish));
+      else fallback = setTimeout(finish, 180);
     });
+    window.touchdeck.bubbleReady();
 
     return () => {
       ball.removeEventListener("pointerdown", onPointerDown);

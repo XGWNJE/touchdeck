@@ -7,17 +7,17 @@
   html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
   /* 扁平化球体：纯色填充 + 细描边，去掉渐变高光和外投影 */
   #ball {
-    position: absolute; inset: 4px; border-radius: 50%;
+    position: absolute; left: 50%; top: 50%;
+    width: calc(min(100vw, 100vh) - 8px); aspect-ratio: 1;
+    transform: translate(-50%, -50%); border-radius: 50%;
     background: #f4f4f6;
     box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
     opacity: .62;
-    /* 透明度过渡统一 60ms（2026-08-14）：淡入淡出必须与主进程 BUBBLE_FADE_MS 同步，
-       否则淡入回到默认 150ms，主进程 60ms 后就展开菜单，hub 盖在半透明球上叠影 */
+    /* 透明度过渡 60ms；主进程等待 transitionend 回执，不再按固定时长猜测绘制完成。 */
     transition: opacity .06s, transform .1s;
   }
-  body.pressed #ball { opacity: .85; transform: scale(.94); }
-  /* 侧键传送淡出态（2026-08-14）：透明度过渡只在此态压缩到 60ms（与主进程
-     BUBBLE_FADE_MS 同步），位移过程更干脆；常规 pressed/armed 过渡不受影响 */
+  body.pressed #ball { opacity: .85; transform: translate(-50%, -50%) scale(.94); }
+  /* 侧键传送淡出态：位移过程保持干脆；常规 pressed/armed 过渡不受影响。 */
   body.fading #ball {
     opacity: 0;
     transition: opacity .06s, transform .06s;

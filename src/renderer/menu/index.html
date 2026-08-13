@@ -16,16 +16,6 @@
   }
   #stage.open { opacity: 1; }
   canvas { display: block; }
-  /* 球芯独立层：不参与 stage 弹出缩放，尺寸 = 悬浮球实际球径（ballSize-8），
-     保证菜单展开前后球大小完全一致（2026-08-13 修正：原来画在 canvas 里随 stage 缩放且偏大 8px）。
-     直接显示、不做淡入（2026-08-14 修正）：hub 与悬浮球同色同形，展开时若淡入会与
-     下层半透明球叠加成两层叠影（边缘毛糙、不圆）；立即不透明显示即无缝衔接 */
-  #hub {
-    position: absolute; border-radius: 50%;
-    background: #f4f4f6;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
-    pointer-events: none;
-  }
   #flash {
     position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
     background: rgba(34, 34, 38, .9); color: #fff; font-size: 14px;

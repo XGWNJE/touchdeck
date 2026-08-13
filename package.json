@@ -1,6 +1,6 @@
 {
     "name": "touchdeck",
-    "version": "0.3.0",
+    "version": "0.3.2",
     "description": "面向 Android 平板远程操作 Windows GUI coding agent（如 Codex）的可靠触控指令面板",
     "main": "out/main/index.js",
     "type": "module",

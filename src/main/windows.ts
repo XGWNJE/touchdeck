@@ -17,6 +17,7 @@ const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
 const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.ico");
 // electron-vite dev 模式走 dev server URL；`electron .` 直跑/打包后走 out/renderer 文件
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
+let bubbleRendererReadyId: number | null = null;
 function loadRenderer(win: BrowserWindow, page: string): void {
   if (!app.isPackaged && RENDERER_URL) win.loadURL(`${RENDERER_URL}/${page}/`);
   else win.loadFile(path.join(ROOT, "out", "renderer", page, "index.html"));
@@ -24,9 +25,9 @@ function loadRenderer(win: BrowserWindow, page: string): void {
 
 function bubbleAnchor() {
   if (!wins.bubble || wins.bubble.isDestroyed()) return null;
-  const b = wins.bubble.getBounds();
-  // 浮点中心（不 round）：菜单 hub 定位用浮点，与球渲染位置严格重合，
-  // 取整会让 hub 与球错开 ±0.5px，在非 100% DPI 下放大成"两层球"观感（2026-08-14 修复）
+  // 菜单只画扇区，真实悬浮球是唯一球芯；锚点必须取 Chromium 内容区中心，
+  // 不能用可能含 Win32 非客户区/DPI 取整误差的窗口外框中心。
+  const b = wins.bubble.getContentBounds();
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -53,10 +54,15 @@ function createBubbleWindow(): void {
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   });
   wins.bubble = bubbleWin;
+  bubbleRendererReadyId = null;
   bubbleWin.setAlwaysOnTop(true, "screen-saver");
   bubbleWin.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
   loadRenderer(bubbleWin, "bubble");
   bubbleWin.webContents.on("console-message", (_e, _l, msg) => console.log("[bubble]", msg));
+  const bubbleContentsId = bubbleWin.webContents.id;
+  bubbleWin.on("closed", () => {
+    if (bubbleRendererReadyId === bubbleContentsId) bubbleRendererReadyId = null;
+  });
 
   // 拖球结束后持久化位置（SetWindowPos 轮询移动未必触发 moved 事件，stop-drag 里已兜底）
   let moveSaveTimer: NodeJS.Timeout | null = null;
@@ -71,13 +77,13 @@ function createBubbleWindow(): void {
   console.log("[touchdeck] bubble window", JSON.stringify(bubbleWin.getBounds()));
 }
 
-// 打开全屏透明菜单窗口；anchorOverride 存在时以该点（如鼠标当前位置）为锚点展开，
-// 否则以悬浮球中心为锚点。菜单展开期间不隐藏悬浮球：锚点=球位置时由 hub 球芯
-// 覆盖显示、视觉一致（2026-08-14 修订：原先 hide 球，侧键场景锚点≠球位置会抖动；
-// 现在侧键触发前先把球移动到鼠标位置，锚点恒等于球位置，无需 hide）。
+// 打开全屏透明菜单窗口；anchorOverride 存在时以该点展开，否则以悬浮球内容区中心展开。
+// 菜单只画扇区、不再复制球芯：真实悬浮球是唯一视觉来源，从结构上消除跨窗口叠影。
 function openMenuWindow(anchorOverride?: { x: number; y: number }): void {
   if (wins.menu && !wins.menu.isDestroyed()) return;
-  const b = screen.getPrimaryDisplay().bounds;
+  const globalAnchor = anchorOverride ?? bubbleAnchor();
+  if (!globalAnchor) return;
+  const b = screen.getDisplayNearestPoint({ x: globalAnchor.x, y: globalAnchor.y }).bounds;
   const menuWin = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
     icon: APP_ICON,
@@ -95,13 +101,11 @@ function openMenuWindow(anchorOverride?: { x: number; y: number }): void {
       closeMenuWindow();
       return;
     }
-    // 菜单展开期间球保持可见：hub 球芯与球同尺寸同色、锚点与球中心严格重合（浮点），
-    // 不透明 hub 完全盖住半透明球 → 视觉上只有一个圆（2026-08-14 修复：此前 hide 球，
-    // hide 与 hub 显示存在时序缝隙，表现为"球出现后又位移"；不隐藏则无缝衔接）。
+    const bubbleContent = wins.bubble.getContentBounds();
     console.log("[touchdeck] menu window bounds", JSON.stringify(menuWin.getBounds()));
     menuWin.webContents.send("menu-init", {
-      anchor,
-      ballSize: wins.bubble.getBounds().width,
+      anchor: { x: anchor.x - b.x, y: anchor.y - b.y },
+      ballSize: Math.max(1, Math.min(bubbleContent.width, bubbleContent.height) - 8),
       screen: { width: b.width, height: b.height },
     });
   });
@@ -113,8 +117,7 @@ export function closeMenuWindow(): void {
   }
   wins.menu = null;
   // 菜单销毁后立即把球拉回置顶层顶部，不等下个轮询周期
-  // （菜单窗口与球同为置顶，后创建的菜单会排在球前；收起后球须恢复最上层。
-  //  球在菜单展开期间保持可见（被不透明 hub 精确覆盖），无需 show）
+  // （菜单窗口与球同为置顶，后创建的菜单会排在球前；收起后球须恢复最上层）
   if (wins.bubble && !wins.bubble.isDestroyed()) {
     wins.bubble.setAlwaysOnTop(true, "screen-saver");
   }
@@ -264,7 +267,7 @@ export function stopPanel(): void {
 // Windows 置顶语义：置顶窗口按“最近一次成为置顶”排序，其他应用新建置顶/全屏窗口
 // 会不断插到悬浮球前面，球的层级持续下跌最终被普通窗口挡住（2026-08-14 实证）。
 // setAlwaysOnTop 只在调用时生效，不能维持；面板开启期间必须周期性地把球重新拉回
-// 置顶层顶部。菜单展开时不提顶（菜单窗口也是置顶且需盖住球，由 hub 球芯替代显示）；
+// 置顶层顶部。菜单展开时不提顶（菜单窗口需接收全屏菜单交互，但透明中心透出真实球）；
 // 菜单销毁由 closeMenuWindow 立即提顶一次，这里只兜底常规窗口堆叠。
 let topmostTimer: NodeJS.Timeout | null = null;
 const TOPMOST_KEEPALIVE_MS = 2000; // 周期：置顶层级下跌是慢过程，2s 足以及时拉回且开销可忽略
@@ -296,34 +299,87 @@ function stopTopmostKeepAlive(): void {
 let x2Timer: NodeJS.Timeout | null = null;
 let x2PrevDown = false;
 const XBUTTON2_POLL_MS = 25;
-const BUBBLE_FADE_MS = 60;  // 球淡出/淡入时长（渲染端 fading 态 transition 同步为 60ms）
+const BUBBLE_FADE_TIMEOUT_MS = 240;
+let bubbleFadeSeq = 0;
+let bubbleTeleporting = false;
+const pendingBubbleFades = new Map<string, {
+  senderId: number;
+  finish: () => void;
+}>();
 
-// 把悬浮球淡出→移动到指定位置→淡入；移动完成回调在淡入**完全结束**后触发。
+async function waitForBubbleRenderer(w: BrowserWindow): Promise<boolean> {
+  const deadline = Date.now() + 1200;
+  while (!w.isDestroyed() && bubbleRendererReadyId !== w.webContents.id && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+  return !w.isDestroyed() && bubbleRendererReadyId === w.webContents.id;
+}
+
+// 等渲染端 opacity transitionend 后再继续移动；超时只作兜底，不能再把 CSS 时长当成绘制完成证明。
+function waitForBubbleFade(w: BrowserWindow, visible: boolean): Promise<void> {
+  if (w.isDestroyed()) return Promise.resolve();
+  const contents = w.webContents;
+  const requestId = `bubble-fade-${Date.now()}-${++bubbleFadeSeq}`;
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: NodeJS.Timeout | null = null;
+    const send = () => {
+      if (settled || w.isDestroyed()) { finish(); return; }
+      pendingBubbleFades.set(requestId, { senderId: contents.id, finish });
+      contents.send("bubble-fade", visible, requestId);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      contents.removeListener("did-finish-load", send);
+      w.removeListener("closed", finish);
+      pendingBubbleFades.delete(requestId);
+      resolve();
+    };
+    timer = setTimeout(() => {
+      console.warn("[touchdeck] bubble fade acknowledgement timeout", requestId, visible ? "in" : "out");
+      finish();
+    }, BUBBLE_FADE_TIMEOUT_MS);
+    w.once("closed", finish);
+    if (contents.isLoadingMainFrame()) contents.once("did-finish-load", send);
+    else send();
+  });
+}
+
+// 把悬浮球淡出→移动到指定位置→淡入；移动完成回调在渲染端确认淡入结束后触发。
 // 移动用 Win32 SetWindowPos（物理像素换算）：透明窗口上 Electron setPosition 移动
 // 会残留旧位置伪影（drag.ts 注释已记载），表现为"旧位置留半个球、新位置出现球"
 // 的两层观感（2026-08-14 实证）；SetWindowPos 是拖拽已验证的无伪影路径。
-// done 必须等淡入结束：若在淡入中途就展开菜单，扇区动画会盖在尚未稳定的球上。
-function teleportBubble(x: number, y: number, done?: () => void): void {
+async function teleportBubble(x: number, y: number, done?: () => void): Promise<void> {
   const w = wins.bubble;
   if (!w || w.isDestroyed()) { done?.(); return; }
+  if (bubbleTeleporting) return;
+  bubbleTeleporting = true;
   ensureWin32();
   const hwnd = hwndOf(w);
   const scale = screen.getDisplayNearestPoint({ x, y }).scaleFactor || 1;
-  w.webContents.send("bubble-fade", false);            // 淡出
-  setTimeout(() => {
-    if (w.isDestroyed()) { done?.(); return; }
-    SetWindowPos(hwnd, 0, Math.round(x * scale), Math.round(y * scale), 0, 0, 0x0215);
+  let moved = false;
+  try {
+    if (!(await waitForBubbleRenderer(w))) throw new Error("bubble renderer not ready");
+    await waitForBubbleFade(w, false);
+    if (w.isDestroyed()) return;
+    const ok = SetWindowPos(hwnd, 0, Math.round(x * scale), Math.round(y * scale), 0, 0, 0x0215);
+    if (!ok) throw new Error("SetWindowPos failed");
     saveState({ x, y });                               // 球保留在新位置，重启恢复同位置
-    setTimeout(() => {
-      if (w.isDestroyed()) { done?.(); return; }
-      w.webContents.send("bubble-fade", true);         // 淡入
-      setTimeout(() => done?.(), BUBBLE_FADE_MS);      // 等淡入完全结束再回调
-    }, BUBBLE_FADE_MS);
-  }, BUBBLE_FADE_MS);
+    moved = true;
+    w.webContents.invalidate();
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  } catch (err: any) {
+    console.error("[touchdeck] bubble teleport failed:", err?.message || String(err));
+  } finally {
+    if (!w.isDestroyed()) await waitForBubbleFade(w, true);
+    bubbleTeleporting = false;
+  }
+  if (moved) done?.();
 }
 
-// 侧键展开的锚点：openMenuWindow 内部用 bubbleAnchor() 读取传送后的球实际中心（浮点），
-// 菜单 hub 与球严格重合，不产生叠影（2026-08-14 修复）
+// 侧键展开的锚点由 openMenuWindow 读取传送后的球内容区中心。
 
 function startXButton2Watch(): void {
   if (x2Timer) return;
@@ -334,6 +390,7 @@ function startXButton2Watch(): void {
     const edge = down && !x2PrevDown;
     x2PrevDown = down;
     if (!edge) return;
+    if (bubbleTeleporting) return;
     if (wins.menu && !wins.menu.isDestroyed()) {
       // 菜单已展开时再按侧键：看鼠标是否还在球上
       const pt = screen.getCursorScreenPoint();
@@ -346,17 +403,17 @@ function startXButton2Watch(): void {
         closeMenuWindow();
         const [bw, bh] = wins.bubble.getSize();
         const [tx, ty] = clampToWorkArea(Math.round(pt.x - bw / 2), Math.round(pt.y - bh / 2), bw, bh);
-        teleportBubble(tx, ty, () => openMenuWindow());
+        void teleportBubble(tx, ty, () => openMenuWindow());
       }
       return;
     }
     // 展开：球传送到鼠标位置（夹取在工作区内）后，以球实际中心为锚点展开菜单。
-    // 不传 anchorOverride：openMenuWindow 内部用 bubbleAnchor() 读取传送后的 getBounds，
-    // 锚点永远等于球实际中心（浮点），菜单 hub 与球严格重合（2026-08-14 修复）
+    // 不传 anchorOverride：openMenuWindow 内部用 bubbleAnchor() 读取传送后的内容区，
+    // 锚点永远等于球实际内容区中心，菜单中心不再复制第二个球。
     const pt = screen.getCursorScreenPoint();
     const [bw, bh] = wins.bubble.getSize();
     const [tx, ty] = clampToWorkArea(Math.round(pt.x - bw / 2), Math.round(pt.y - bh / 2), bw, bh);
-    teleportBubble(tx, ty, () => openMenuWindow());
+    void teleportBubble(tx, ty, () => openMenuWindow());
   }, XBUTTON2_POLL_MS);
 }
 
@@ -371,6 +428,15 @@ function stopXButton2Watch(): void {
 // 菜单开关：必须只注册一次（曾挂在 createBubbleWindow 里，面板每次重建都叠加监听，
 // 两次监听把一次 toggle 执行成「开+关」，菜单闪开即收——2026-08-06 热重载触发实证）
 export function registerMenuIpc(): void {
+  ipcMain.on("bubble-ready", (event) => {
+    if (!wins.bubble || wins.bubble.isDestroyed() || event.sender.id !== wins.bubble.webContents.id) return;
+    bubbleRendererReadyId = event.sender.id;
+  });
+  ipcMain.on("bubble-fade-complete", (event, requestId: string) => {
+    const pending = pendingBubbleFades.get(requestId);
+    if (!pending || pending.senderId !== event.sender.id) return;
+    pending.finish();
+  });
   ipcMain.on("toggle-menu", () => {
     if (wins.menu && !wins.menu.isDestroyed()) closeMenuWindow();
     else openMenuWindow();

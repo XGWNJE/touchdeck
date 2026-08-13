@@ -9,7 +9,7 @@
 远程桌面负责呈现完整界面，TouchDeck 负责让你在平板上可靠地触发高频命令。
 
 [![CI](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml)
-![版本](https://img.shields.io/badge/version-v0.3.0-2ea44f)
+![版本](https://img.shields.io/badge/version-v0.3.2-2ea44f)
 ![许可证](https://img.shields.io/badge/license-MIT-blue)
 ![Windows](https://img.shields.io/badge/Windows-Host-0078D6?logo=windows&logoColor=white)
 ![Android](https://img.shields.io/badge/Android-Client-3DDC84?logo=android&logoColor=white)
@@ -32,7 +32,7 @@
 
 ## 当前开发方向
 
-v0.2.2 可靠指令闭环与 v0.2.3 安全配对已完成受控验证。当前进入 **v0.3.0 单一黄金工作流**：让用户无需修改 JSON，就能在平板上完成一次可靠的 GUI 编程 Agent 操作。
+v0.2.2 可靠指令闭环与 v0.2.3 安全配对已完成受控验证，v0.3.0 已落地单一黄金工作流，v0.3.2 已完成本机侧键触达与菜单反馈增强。当前继续用真实使用数据验证这套工作流，不扩展第二个场景。
 
 当前不新增第二个场景，不做通用配置编辑器、自由布局、插件或配置市场；双真机已完成安全配对、跨信令重启续连、定向 ACK、动作绑定和首轮候选验收，现已收敛为 9 个动作，下一步连续使用 7 天并按真实频率与误触继续删减。
 
