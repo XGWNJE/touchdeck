@@ -125,6 +125,7 @@ v0.2.2「远程触控指令可靠性闭环」和 v0.2.3「安全配对」已完�
 5. 等待 CI 全绿，核验 APK、Windows setup、portable 和信令 tar.gz 均存在。
 6. CI 失败时修复根因后删除坏标签并重推；不得绕过 CHANGELOG 检查。
 7. 测试期构建产物上传中转站前必须先征得 owner 同意；正式发包只走 GitHub Releases。
+8. 测试期交付默认优先提供 Windows portable；需要 Android 验证时再同时提供 APK，不得只交 APK 而遗漏 Host 控制台。
 
 ## 文档职责
 
