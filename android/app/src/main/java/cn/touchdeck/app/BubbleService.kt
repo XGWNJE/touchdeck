@@ -204,13 +204,33 @@ class BubbleService : Service() {
     }
 
     /**
+     * 防误触门槛达成：一次强而干脆的中震，明确表示「已选中，现在可以松开」。
+     * 它刻意强于执行成功的轻触，并与拦截/失败的双震区分。
+     */
+    private fun vibrateSelectionArmed() {
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            } ?: return@runCatching
+            if (!vibrator.hasVibrator()) return@runCatching
+            if (Build.VERSION.SDK_INT >= 26) {
+                vibrator.vibrate(VibrationEffect.createOneShot(85, 255))
+            } else {
+                @Suppress("DEPRECATION") vibrator.vibrate(85)
+            }
+        }
+    }
+
+    /**
      * 动作结果触感：成功短促，拦截为轻双击，执行失败/断线/超时为明显长双击。
      * queued 不震，避免把「已经发出」误感知成「已经执行」。断线可能一次结算多个
      * pending 请求，因此在很短窗口内合并触感，防止连续震动轰炸。
      */
     private fun vibrateActionResult(status: String) {
         val timings = when (status) {
-            "executed" -> longArrayOf(0, 40)
+            "executed" -> longArrayOf(0, 25)
             "blocked" -> longArrayOf(0, 35, 55, 35)
             "failed", "disconnected", "timeout" -> longArrayOf(0, 120, 70, 120)
             else -> return
@@ -483,6 +503,10 @@ class BubbleService : Service() {
                     android.util.Log.d("TouchDeck", "dismiss (release outside)")
                     collapsePanel()
                 },
+                onArmed = { _, label ->
+                    vibrateSelectionArmed()
+                    flashLabel("已选中，可松开：$label")
+                },
                 onSelect = { id, label ->
                     android.util.Log.d("TouchDeck", "onSelect id=$id label=$label")
                     pressServer(id, label)
@@ -553,8 +577,6 @@ class BubbleService : Service() {
     private fun beginHold(id: String, label: String, interactionId: String) {
         finishActiveHold()
         activeHold = ActiveHold(id, label, interactionId)
-        // 200ms 稳定门槛已在 RadialMenuView 达成；此处用短震确认进入保持会话。
-        vibrateOnDragStart()
         when (P2PState.sendHold(id, "begin", interactionId)) {
             SendOutcome.QUEUED -> flashLabel("正在开始：$label")
             SendOutcome.DISCONNECTED -> {

@@ -39,6 +39,7 @@ class RadialMenuView(
     viewW: Float = 0f,
     viewH: Float = 0f,
     private val onDismiss: () -> Unit,
+    private val onArmed: (id: String, label: String) -> Unit,
     private val onSelect: (id: String, label: String) -> Unit,
     private val onHoldBegin: (id: String, label: String, interactionId: String) -> Unit,
     private val onHoldEnd: (id: String, label: String, interactionId: String) -> Unit
@@ -93,6 +94,7 @@ class RadialMenuView(
             triggerRunnable = null
             if (pressedIndex != index) return@Runnable
             val item = slots[index].item
+            onArmed(item.id, item.label)
             if (item.triggerMode != "hold") {
                 tapArmedIndex = index
                 android.util.Log.d("TouchDeck", "armed tap index=$index id=${item.id}")
