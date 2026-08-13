@@ -9,6 +9,15 @@
 远程桌面负责呈现完整界面，TouchDeck 负责让你在平板上可靠地触发高频命令。
 
 [![CI](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml)
+![版本](https://img.shields.io/badge/version-v0.3.0-2ea44f)
+![许可证](https://img.shields.io/badge/license-MIT-blue)
+![Windows](https://img.shields.io/badge/Windows-Host-0078D6?logo=windows&logoColor=white)
+![Android](https://img.shields.io/badge/Android-Client-3DDC84?logo=android&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-P2P-29ABE2?logo=webrtc&logoColor=white)
 
 </div>
 
