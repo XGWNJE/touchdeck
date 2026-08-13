@@ -20,6 +20,7 @@ function withAlpha(color: string, alpha: number): string {
 function Menu() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hubRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -137,24 +138,8 @@ function Menu() {
       ctx.save();
       ctx.translate(cx, cy);
 
-      // 球芯：与初始球同尺寸（白球渐变 + 阴影），菜单展开时视觉一致。
-      // 覆盖菜单窗口下被环遮挡的球，避免"球变小"的观感。
-      const r = ballSize / 2;
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 8;
-      const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.15, 0, 0, r);
-      g.addColorStop(0, "#ffffff");
-      g.addColorStop(1, "#c8c8ce");
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, TAU);
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = "transparent";
-      ctx.strokeStyle = "rgba(0,0,0,0.25)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
+      // 球芯由独立 DOM 层 #hub 渲染（不参与 stage 弹出缩放，尺寸=悬浮球实际球径），
+      // 覆盖菜单窗口下被环遮挡的球，避免"球变小/变大"的观感（2026-08-13 修正）
       for (let i = 0; i < slots.length; i++) {
         const s = slots[i];
         const a0 = s.a0, a1 = s.a1;
@@ -281,6 +266,14 @@ function Menu() {
       setSize(screen.width, screen.height);
       stage.style.setProperty("--px", anchor.x + "px");
       stage.style.setProperty("--py", anchor.y + "px");
+      // 球芯独立层：尺寸 = 悬浮球实际球径（ballSize-8，球 CSS inset 4px），
+      // 绝对定位居中于锚点，不随 stage 缩放 → 展开前后球大小完全一致
+      const hub = hubRef.current!;
+      const hubSize = Math.max(1, ballSize - 8);
+      hub.style.width = hubSize + "px";
+      hub.style.height = hubSize + "px";
+      hub.style.left = (anchor.x - hubSize / 2) + "px";
+      hub.style.top = (anchor.y - hubSize / 2) + "px";
       requestAnimationFrame(() => stage.classList.add("open"));
 
       for (const s of state.slots) loadIcon(s.item.icon);
@@ -306,6 +299,7 @@ function Menu() {
 
   return (
     <>
+      <div id="hub" ref={hubRef}></div>
       <div id="stage" ref={stageRef}><canvas id="cv" ref={canvasRef}></canvas></div>
       <div id="flash" ref={flashRef}></div>
     </>

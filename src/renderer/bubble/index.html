@@ -5,30 +5,37 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  /* 扁平化球体：纯色填充 + 细描边，去掉渐变高光和外投影 */
   #ball {
     position: absolute; inset: 4px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #ffffff, #cfcfd4);
-    box-shadow: 0 2px 8px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.15);
-    opacity: .6;
+    background: #f4f4f6;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
+    opacity: .62;
     transition: opacity .15s, transform .1s;
   }
   body.pressed #ball { opacity: .85; transform: scale(.94); }
-  /* 长按进度环：conic 填充随 --p（0..1）走满 350ms；armed 后整环常亮。
-     环收在窗口内（inset 3px、2px 细环）：外扩发光会被球尺寸窗口裁切，不做外发光 */
+  /* 长按进度环：SVG 圆头弧线随进度走满 HOLD_MS；armed 后整环常亮。
+     环铺满窗口（viewBox 100，圆 r=48、3px 圆头描边），紧贴球外缘不外扩——
+     外扩发光会被球尺寸窗口裁切，不做外发光。
+     瞬显瞬隐（无淡出过渡）：松手/取消/拖拽结束立即消失，避免进度环残影
+     透过全屏透明菜单窗口露出来（2026-08-13 修正） */
   #ring {
-    position: absolute; inset: 3px; border-radius: 50%; opacity: 0;
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
     pointer-events: none; /* 环纯视觉：盖在球上但不能截走球的 pointerdown（2026-08-06 实证） */
-    background: conic-gradient(rgba(34,211,238,.55) calc(var(--p, 0) * 1turn), rgba(255,255,255,.08) 0);
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-            mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-    transition: opacity .12s;
+  }
+  #ring circle { fill: none; stroke-width: 3; }
+  #ringTrack { stroke: rgba(255,255,255,.18); }
+  #ringProg {
+    stroke: rgba(34,211,238,.95); stroke-linecap: round;
+    stroke-dasharray: 301.6; stroke-dashoffset: 301.6; /* 周长 2π×48 */
   }
   body.holding #ring { opacity: 1; }
-  body.armed #ring { opacity: 1; background: rgba(34,211,238,.9); }
-  /* 拖球待命：轻微提亮 + 内描边（克制，不外扩——窗口只有球大，外发光必被裁） */
+  body.armed #ring { opacity: 1; }
+  body.armed #ringProg { stroke-dashoffset: 0; }
+  /* 拖球待命：轻微提亮 + 青色内描边（扁平，不外扩——窗口只有球大，外发光必被裁） */
   body.armed #ball {
     opacity: 1;
-    box-shadow: inset 0 0 0 1.5px rgba(34,211,238,.85), 0 2px 8px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.15);
+    box-shadow: inset 0 0 0 2px rgba(34,211,238,.9), inset 0 0 0 1px rgba(0,0,0,.1);
   }
 </style>
 </head>

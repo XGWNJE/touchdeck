@@ -15,7 +15,7 @@ function sendResult(clientId: string, result: ActionResult): void {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
-const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.png");
+const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.ico");
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
 let peerReady = false;
 let pendingPeerStart = false;

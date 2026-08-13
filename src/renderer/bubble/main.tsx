@@ -8,21 +8,23 @@ import React, { useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 
 const HOLD_MS = 350;      // 长按进拖球
+const RING_C = 2 * Math.PI * 48;   // SVG 环周长（viewBox 100，r=48）≈ 301.6
 
 function Bubble() {
-  const ringRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<SVGSVGElement>(null);
   // pressed：悬停 pointermove 也会触发（Chromium 兼容事件），必须按下后才响应
   const st = useRef({ pressed: false, dragging: false, holdTimer: null as ReturnType<typeof setTimeout> | null, holdRaf: 0 as number | null });
 
   useEffect(() => {
     const body = document.body;
     const ring = ringRef.current!;
+    const ringProg = ring.querySelector<SVGCircleElement>("#ringProg")!;
     const s = st.current;
 
     const clearHold = () => {
       if (s.holdTimer) { clearTimeout(s.holdTimer); s.holdTimer = null; }
       if (s.holdRaf) { cancelAnimationFrame(s.holdRaf); s.holdRaf = null; }
-      ring.style.setProperty("--p", "0");
+      ringProg.style.strokeDashoffset = String(RING_C);   // 进度清零
       body.classList.remove("holding");
     };
 
@@ -35,13 +37,15 @@ function Bubble() {
       const t0 = performance.now();
       const tick = (t: number) => {
         // 进度环与长按计时同源同步：视觉上走满 ≈ 拖球待命
-        ring.style.setProperty("--p", String(Math.min(1, (t - t0) / HOLD_MS)));
+        const p = Math.min(1, (t - t0) / HOLD_MS);
+        ringProg.style.strokeDashoffset = String(RING_C * (1 - p));
         s.holdRaf = requestAnimationFrame(tick);
       };
       s.holdRaf = requestAnimationFrame(tick);
       s.holdTimer = setTimeout(() => {
         s.holdTimer = null;
         if (s.holdRaf) { cancelAnimationFrame(s.holdRaf); s.holdRaf = null; }
+        ringProg.style.strokeDashoffset = "0";            // armed 整环常亮
         s.dragging = true;
         body.classList.remove("pressed", "holding");
         body.classList.add("armed");
@@ -94,7 +98,10 @@ function Bubble() {
   return (
     <>
       <div id="ball"></div>
-      <div id="ring" ref={ringRef}></div>
+      <svg id="ring" ref={ringRef} viewBox="0 0 100 100">
+        <circle id="ringTrack" cx="50" cy="50" r="48"></circle>
+        <circle id="ringProg" cx="50" cy="50" r="48"></circle>
+      </svg>
     </>
   );
 }

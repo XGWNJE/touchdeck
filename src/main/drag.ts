@@ -86,6 +86,13 @@ export function registerDragIpc(): void {
         dbgTick++;
         if (dbgTick > 750) { endDrag(" (timeout)"); return; } // 硬上限 ~12s
         if (nx === lastX && ny === lastY) {
+          // 静止收尾（idle 看门狗）只服务"读不到按键状态"的 UU 触控场景：
+          // 本地鼠标左键仍按住 = 用户在长按中（走完进度后继续按着/拖动中途停顿），
+          // 不触发 idle 收尾，保持可拖拽状态；只有按键状态不可读时才用静止超时
+          // 防松手信号丢失僵死（2026-08-13 修正：原先固定 400ms 静止即收尾，
+          // 长按走完进度后继续按着不动会被误杀，之后移动鼠标拖不动）
+          const stillDown = !!(GetAsyncKeyState(0x01) & 0x8000);
+          if (stillDown) { stillTicks = 0; return; }
           stillTicks++;
           if (stillTicks > 25) endDrag(" (idle)"); // 光标静止 ~400ms 自动收尾
           return;

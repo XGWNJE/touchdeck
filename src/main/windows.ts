@@ -11,7 +11,10 @@ import { enqueueAction } from "./macro";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD = path.join(HERE, "..", "preload", "index.cjs");
-const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.png");
+// Windows 窗口图标用多尺寸 .ico（16..256）：任务栏按目标尺寸取帧，避免 256px PNG
+// 缩放后内容变小/模糊（2026-08-13 修正：原 app-icon.png 内容仅占画布 66%，
+// 且单尺寸 PNG 在任务栏缩放过度；现改为内容铺满的 .ico）
+const APP_ICON = path.join(ROOT, "src", "assets", "app-icon.ico");
 // electron-vite dev 模式走 dev server URL；`electron .` 直跑/打包后走 out/renderer 文件
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL;
 function loadRenderer(win: BrowserWindow, page: string): void {
