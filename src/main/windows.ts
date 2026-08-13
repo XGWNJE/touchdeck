@@ -103,6 +103,11 @@ export function closeMenuWindow(): void {
     wins.menu.destroy();
   }
   wins.menu = null;
+  // 菜单销毁后立即把球拉回置顶层顶部，不等下个轮询周期
+  // （菜单窗口与球同为置顶，后创建的菜单会排在球前；收起后球须恢复最上层）
+  if (wins.bubble && !wins.bubble.isDestroyed()) {
+    wins.bubble.setAlwaysOnTop(true, "screen-saver");
+  }
 }
 
 // ===== 键鼠交互：Tab 键展开菜单，松开 Tab 确认悬停项 =====
@@ -227,10 +232,12 @@ export function startPanel(): void {
   wins.bubble = null;
   createBubbleWindow();
   registerTabShortcut();
+  startTopmostKeepAlive();
   notifyPanelStatus();
 }
 
 export function stopPanel(): void {
+  stopTopmostKeepAlive();
   globalShortcut.unregister("Tab");
   if (tabTimer) clearInterval(tabTimer);
   tabTimer = null;
@@ -239,6 +246,31 @@ export function stopPanel(): void {
   if (wins.bubble && !wins.bubble.isDestroyed()) wins.bubble.destroy();
   wins.bubble = null;
   notifyPanelStatus();
+}
+
+// ===== 悬浮球保持置顶（2026-08-14）=====
+// Windows 置顶语义：置顶窗口按“最近一次成为置顶”排序，其他应用新建置顶/全屏窗口
+// 会不断插到悬浮球前面，球的层级持续下跌最终被普通窗口挡住（2026-08-14 实证）。
+// setAlwaysOnTop 只在调用时生效，不能维持；面板开启期间必须周期性地把球重新拉回
+// 置顶层顶部。菜单展开时不提顶（菜单窗口也是置顶且需盖住球，由 hub 球芯替代显示）；
+// 菜单销毁由 closeMenuWindow 立即提顶一次，这里只兜底常规窗口堆叠。
+let topmostTimer: NodeJS.Timeout | null = null;
+const TOPMOST_KEEPALIVE_MS = 2000; // 周期：置顶层级下跌是慢过程，2s 足以及时拉回且开销可忽略
+
+function startTopmostKeepAlive(): void {
+  if (topmostTimer) return;
+  topmostTimer = setInterval(() => {
+    if (panelDisabled() || !wins.bubble || wins.bubble.isDestroyed()) return;
+    if (wins.menu && !wins.menu.isDestroyed()) return; // 菜单展开中：球应在菜单下方
+    wins.bubble.setAlwaysOnTop(true, "screen-saver");
+  }, TOPMOST_KEEPALIVE_MS);
+}
+
+function stopTopmostKeepAlive(): void {
+  if (topmostTimer) {
+    clearInterval(topmostTimer);
+    topmostTimer = null;
+  }
 }
 
 // 菜单开关：必须只注册一次（曾挂在 createBubbleWindow 里，面板每次重建都叠加监听，
