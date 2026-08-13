@@ -1,13 +1,25 @@
+<div align="center">
+
+<img src="src/assets/app-icon.png" alt="TouchDeck" width="96" />
+
 # TouchDeck
 
-面向 Codex 等桌面 GUI 编程 Agent 的平板触控操作层。远程桌面负责呈现完整界面，TouchDeck 负责让你可靠地触发高频命令。
+面向 Codex 等桌面 GUI 编程 Agent 的平板触控操作层。
 
-## 项目干什么
+远程桌面负责呈现完整界面，TouchDeck 负责让你在平板上可靠地触发高频命令。
 
-- Windows 本机运行不抢焦点的悬浮球和径向菜单，快捷键发往之前活动的目标窗口。
-- Android 手机或平板通过 P2P 直连触发 Windows 端的高频命令。
-- 当前只围绕一个 GUI 编程 Agent 工作流开发，首个验证目标是 Codex 这类有完整桌面界面的 Agent。
-- TouchDeck 不替代终端映射；它补足平板远控 GUI Agent 时快捷键难触达、触控成本高、执行结果不明确的问题。
+[![CI](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/XGWNJE/TouchDeck/actions/workflows/ci.yml)
+
+</div>
+
+## 它解决什么
+
+平板远控 Windows 上的 GUI 编程 Agent（如 Codex）时，快捷键难触达、触控成本高、执行结果不明确。TouchDeck 用一套悬浮球 + 径向菜单把高频命令变成一次点击：
+
+- **Windows 本机**：运行不抢焦点的悬浮球和径向菜单，快捷键发往操作前的活动窗口。
+- **Android 端**：手机或平板通过 P2P 直连触发 Windows 端的高频命令。
+- **可靠反馈**：每次动作都有明确的等待、成功、拦截、失败、断线状态反馈。
+- **范围明确**：不替代终端映射，只补足平板远控 GUI Agent 的操作链路。
 
 ## 当前开发方向
 
@@ -17,21 +29,17 @@ v0.2.2 可靠指令闭环与 v0.2.3 安全配对已完成受控验证。当前�
 
 ## 界面展示
 
-<div align="center">
-
 | Windows 径向菜单 | Android 径向菜单 | Android P2P 配对 |
 |:----------------:|:----------------:|:----------------:|
 | <img src="screenshots/windows-menu.jpg" width="200" /> | <img src="screenshots/android-menu.png" width="175" /> | <img src="screenshots/android-p2p.png" width="390" /> |
 
-</div>
+## 快速开始
 
-## 怎么开始
-
-开发运行：`npm run dev`
-
-构建运行：`npm run build` 后执行 `npm start`。
-
-完整操作规则、验证标准和当前禁止范围见 [AGENTS.md](AGENTS.md)。路线与验收门槛见 [docs/roadmap.md](docs/roadmap.md)。
+| 场景 | 命令 |
+|---|---|
+| 开发运行 | `npm run dev` |
+| 构建后运行 | `npm run build`，再执行 `npm start` |
+| 完整操作规则 | 见 [AGENTS.md](AGENTS.md) |
 
 ## 文档地图
 
