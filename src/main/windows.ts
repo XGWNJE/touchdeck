@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "../shared/config-resolve";
 import { ROOT, wins, hwndOf, loadState, saveState, isPositionUsable, clampToWorkArea } from "./state";
-import { ensureWin32, GetAsyncKeyState, SetWindowPos } from "./win32";
+import { ensureWin32, GetAsyncKeyState, SetWindowPos, DwmFlush } from "./win32";
 import { enqueueAction } from "./macro";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -161,15 +161,17 @@ export function registerTabShortcut(): void {
 }
 
 // ===== 控制台窗口（交互界面：面板启停/P2P 连接）+ 面板管理 =====
-const CONSOLE_WIDTH = 760;
-const CONSOLE_HEIGHT = 880;
+const CONSOLE_WIDTH = 1180;
+const CONSOLE_HEIGHT = 760;
 
 export function createConsoleWindow(): void {
   const consoleWin = new BrowserWindow({
     width: CONSOLE_WIDTH, height: CONSOLE_HEIGHT,
-    minWidth: 680, minHeight: 720,
+    minWidth: 960, minHeight: 640,
     title: "TouchDeck 控制台",
     icon: APP_ICON,
+    frame: false,
+    backgroundColor: "#0b0d10",
     autoHideMenuBar: true,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   });
@@ -246,13 +248,13 @@ export function startPanel(): void {
   createBubbleWindow();
   registerTabShortcut();
   startTopmostKeepAlive();
-  startXButton2Watch();
+  startMiddleButtonWatch();
   notifyPanelStatus();
 }
 
 export function stopPanel(): void {
   stopTopmostKeepAlive();
-  stopXButton2Watch();
+  stopMiddleButtonWatch();
   globalShortcut.unregister("Tab");
   if (tabTimer) clearInterval(tabTimer);
   tabTimer = null;
@@ -288,17 +290,17 @@ function stopTopmostKeepAlive(): void {
   }
 }
 
-// ===== 鼠标侧键展开菜单（2026-08-14，v0.3.2）=====
-// 无键盘时用鼠标前进键（XButton2, VK 0x06）展开/收起菜单。触发展开时把悬浮球
+// ===== 鼠标中键展开菜单 =====
+// 无键盘时用鼠标中键（VK_MBUTTON 0x04）展开/收起菜单。触发展开时把悬浮球
 // 传送到鼠标当前位置（淡出→移动→淡入），菜单以球中心为锚点展开——球保留在新位置，
 // 不再回到原位（2026-08-14 修订：原实现菜单锚点=鼠标但球留在原处并 hide，视觉抖动；
 // 现改为移动球本身，锚点恒等于球位置，无 hide 也就无抖动）。
 // 轮询 GetAsyncKeyState 检测下降沿（本帧按下且上帧未按下），避免长按/自动重复误触发；
-// 只在本机鼠标场景生效（UU 触控注入读不到按键状态，且侧键本就只存在于真实鼠标）。
-// 菜单在别处展开（点球/Tab）时侧键同样可收起：语义 = toggle。
-let x2Timer: NodeJS.Timeout | null = null;
-let x2PrevDown = false;
-const XBUTTON2_POLL_MS = 25;
+// 只在本机鼠标场景生效（UU 触控注入读不到按键状态）。
+// 菜单在别处展开（点球/Tab）时中键同样可收起：语义 = toggle。
+let middleButtonTimer: NodeJS.Timeout | null = null;
+let middleButtonPrevDown = false;
+const MIDDLE_BUTTON_POLL_MS = 25;
 const BUBBLE_FADE_TIMEOUT_MS = 240;
 let bubbleFadeSeq = 0;
 let bubbleTeleporting = false;
@@ -369,7 +371,8 @@ async function teleportBubble(x: number, y: number, done?: () => void): Promise<
     saveState({ x, y });                               // 球保留在新位置，重启恢复同位置
     moved = true;
     w.webContents.invalidate();
-    await new Promise((resolve) => setTimeout(resolve, 16));
+    // 等待新位置进入桌面合成，再走淡入回执和菜单展开。
+    DwmFlush();
   } catch (err: any) {
     console.error("[touchdeck] bubble teleport failed:", err?.message || String(err));
   } finally {
@@ -379,20 +382,26 @@ async function teleportBubble(x: number, y: number, done?: () => void): Promise<
   if (moved) done?.();
 }
 
-// 侧键展开的锚点由 openMenuWindow 读取传送后的球内容区中心。
+// 中键展开的锚点由 openMenuWindow 读取传送后的球内容区中心。
 
-function startXButton2Watch(): void {
-  if (x2Timer) return;
+function startMiddleButtonWatch(): void {
+  if (middleButtonTimer) return;
   ensureWin32();
-  x2Timer = setInterval(() => {
+  middleButtonTimer = setInterval(() => {
     if (panelDisabled() || !wins.bubble || wins.bubble.isDestroyed()) return;
-    const down = !!(GetAsyncKeyState(0x06) & 0x8000);
-    const edge = down && !x2PrevDown;
-    x2PrevDown = down;
+    const down = !!(GetAsyncKeyState(0x04) & 0x8000);
+    const edge = down && !middleButtonPrevDown;
+    middleButtonPrevDown = down;
     if (!edge) return;
+    triggerRepositionMenu();
+  }, MIDDLE_BUTTON_POLL_MS);
+}
+
+function triggerRepositionMenu(): void {
     if (bubbleTeleporting) return;
+    if (panelDisabled() || !wins.bubble || wins.bubble.isDestroyed()) return;
     if (wins.menu && !wins.menu.isDestroyed()) {
-      // 菜单已展开时再按侧键：看鼠标是否还在球上
+      // 菜单已展开时再按中键：看鼠标是否还在球上
       const pt = screen.getCursorScreenPoint();
       const b = wins.bubble.getBounds();
       const onBall = pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height;
@@ -414,15 +423,14 @@ function startXButton2Watch(): void {
     const [bw, bh] = wins.bubble.getSize();
     const [tx, ty] = clampToWorkArea(Math.round(pt.x - bw / 2), Math.round(pt.y - bh / 2), bw, bh);
     void teleportBubble(tx, ty, () => openMenuWindow());
-  }, XBUTTON2_POLL_MS);
 }
 
-function stopXButton2Watch(): void {
-  if (x2Timer) {
-    clearInterval(x2Timer);
-    x2Timer = null;
+function stopMiddleButtonWatch(): void {
+  if (middleButtonTimer) {
+    clearInterval(middleButtonTimer);
+    middleButtonTimer = null;
   }
-  x2PrevDown = false;
+  middleButtonPrevDown = false;
 }
 
 // 菜单开关：必须只注册一次（曾挂在 createBubbleWindow 里，面板每次重建都叠加监听，

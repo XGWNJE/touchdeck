@@ -1,6 +1,6 @@
 // 通用 IPC：配置/图标/注入/诊断截屏 + 控制台启停。
 // 在 app.whenReady 统一注册，不挂某个窗口的创建流程上（窗口重建不叠加监听）。
-import { ipcMain, screen, desktopCapturer } from "electron";
+import { BrowserWindow, ipcMain, screen, desktopCapturer } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveConfig, resolveIcon } from "../shared/config-resolve";
@@ -46,6 +46,13 @@ export function registerCommonIpc(): void {
 }
 
 export function registerConsoleIpc(): void {
+  ipcMain.on("console-window-control", (event, action: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win !== wins.console) return;
+    if (action === "minimize") win.minimize();
+    else if (action === "maximize") win.isMaximized() ? win.unmaximize() : win.maximize();
+    else if (action === "close") win.close();
+  });
   const bindingsChanged = () => {
     if (wins.menu && !wins.menu.isDestroyed()) wins.menu.webContents.send("menu-reload");
     broadcastButtons();

@@ -19,6 +19,7 @@ export interface TouchdeckApi {
   onMenuReload(cb: () => void): void;
   consoleStatus(): Promise<{ panelRunning: boolean; panelDisabled: boolean }>;
   consoleTogglePanel(): Promise<{ running: boolean }>;
+  consoleWindowControl(action: "minimize" | "maximize" | "close"): void;
   actionBindingsGet(): Promise<any>;
   actionBindingsSave(value: unknown, confirmConflicts?: boolean): Promise<any>;
   actionBindingReset(actionId: string): Promise<any>;

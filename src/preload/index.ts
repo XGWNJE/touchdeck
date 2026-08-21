@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("touchdeck", {
   // 控制台（console）
   consoleStatus: () => ipcRenderer.invoke("console-status"),
   consoleTogglePanel: () => ipcRenderer.invoke("console-toggle-panel"),
+  consoleWindowControl: (action: "minimize" | "maximize" | "close") => ipcRenderer.send("console-window-control", action),
   actionBindingsGet: () => ipcRenderer.invoke("action-bindings-get"),
   actionBindingsSave: (value: unknown, confirmConflicts?: boolean) => ipcRenderer.invoke("action-bindings-save", value, confirmConflicts),
   actionBindingReset: (actionId: string) => ipcRenderer.invoke("action-binding-reset", actionId),

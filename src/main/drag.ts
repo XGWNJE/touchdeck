@@ -8,17 +8,21 @@
 // 四边独立判定、邻边同入阈即吸角，吸附后与边缘保持 EDGE_MARGIN 极限距离。
 import { ipcMain, screen } from "electron";
 import { wins, hwndOf, clampToWorkArea, saveState, EDGE_MARGIN } from "./state";
-import { ensureWin32, ReleaseCapture, SetWindowPos, GetAsyncKeyState } from "./win32";
+import { ensureWin32, ReleaseCapture, SetWindowPos, GetAsyncKeyState, DwmFlush } from "./win32";
 
 export function registerDragIpc(): void {
-  let dragTimer: NodeJS.Timeout | null = null;
-  let snapAnim: NodeJS.Timeout | null = null; // 吸附动画句柄：新拖拽/新收尾必须掐断旧动画，否则两套 SetWindowPos 打架
+  let dragLoop: NodeJS.Immediate | null = null;
+  let dragGeneration = 0;
+  let snapAnim: NodeJS.Immediate | null = null; // 吸附动画句柄：新拖拽/新收尾必须掐断旧动画，否则两套 SetWindowPos 打架
+  let snapGeneration = 0;
 
   const endDrag = (tag: string) => {
-    if (!dragTimer) return;
-    clearInterval(dragTimer);
-    dragTimer = null;
-    if (snapAnim) clearInterval(snapAnim);
+    if (!dragLoop) return;
+    dragGeneration++;
+    clearImmediate(dragLoop);
+    dragLoop = null;
+    if (snapAnim) clearImmediate(snapAnim);
+    snapGeneration++;
     snapAnim = null;
     const w = wins.bubble;
     if (!w) return;
@@ -39,25 +43,33 @@ export function registerDragIpc(): void {
     const scale = screen.getDisplayNearestPoint({ x: tx, y: ty }).scaleFactor || 1;
     const hwnd = hwndOf(w);
     const t0 = Date.now();
-    snapAnim = setInterval(() => {
-      if (w.isDestroyed()) { if (snapAnim) clearInterval(snapAnim); snapAnim = null; return; }
+    const generation = ++snapGeneration;
+    const tickSnap = () => {
+      if (generation !== snapGeneration || !snapAnim) return;
+      if (w.isDestroyed()) { clearImmediate(snapAnim); snapAnim = null; return; }
+      DwmFlush();
+      if (generation !== snapGeneration || !snapAnim) return;
       const k = Math.min(1, (Date.now() - t0) / 140);
       const e = 1 - Math.pow(1 - k, 2);
       const px = Math.round(ex + (tx - ex) * e), py = Math.round(ey + (ty - ey) * e);
       SetWindowPos(hwnd, 0, Math.round(px * scale), Math.round(py * scale), 0, 0, 0x0215);
       if (k >= 1) {
-        if (snapAnim) clearInterval(snapAnim);
+        if (snapAnim) clearImmediate(snapAnim);
         snapAnim = null;
         saveState({ x: tx, y: ty }); // 持久化吸附后的位置（重启恢复不越界）
         console.log("[touchdeck] drag end" + tag, "snap ->", JSON.stringify([tx, ty]));
+      } else {
+        snapAnim = setImmediate(tickSnap);
       }
-    }, 16);
+    };
+    snapAnim = setImmediate(tickSnap);
   };
 
   ipcMain.on("start-drag", () => {
     const w = wins.bubble;
     if (!w) return;
-    if (snapAnim) clearInterval(snapAnim); // 掐断进行中的吸附动画，防与拖拽 SetWindowPos 互相覆盖
+    if (snapAnim) clearImmediate(snapAnim); // 掐断进行中的吸附动画，防与拖拽 SetWindowPos 互相覆盖
+    snapGeneration++;
     snapAnim = null;
     ensureWin32();
     ReleaseCapture();
@@ -66,11 +78,17 @@ export function registerDragIpc(): void {
     const [wx, wy] = w.getPosition();
     const [bw, bh] = w.getSize();
     let lastX = wx, lastY = wy;
-    let dbgTick = 0; // 临时诊断：覆盖整个移动阶段，含 winpos 与 SetWindowPos 返回值
-    let stillTicks = 0; // 静止计时：光标 ~800ms 无移动自动收尾（松手信号丢失时防拖拽僵死）
-    if (dragTimer) clearInterval(dragTimer);
-    dragTimer = setInterval(() => {
+    const dragStartedAt = Date.now();
+    let lastMovementAt = Date.now(); // UU 松手兜底按真实时间计算，不能随显示器刷新率变化
+    if (dragLoop) clearImmediate(dragLoop);
+    const generation = ++dragGeneration;
+    const tick = () => {
+      if (generation !== dragGeneration || !dragLoop) return;
       try {
+        // DwmFlush 会等到下一次桌面合成完成，因此循环天然跟随当前显示器刷新率，
+        // 不再由固定 16ms Node 定时器制造 60Hz 限制和相位抖动。
+        DwmFlush();
+        if (generation !== dragGeneration || !dragLoop) return;
         // 松手检测（兜底①：pointerup 被 SetWindowPos 中断时）：
         // 本地鼠标场景左键抬起立即收尾；UU 触控注入读不到按键状态（已知边界），
         // 由 idle 兜底收尾
@@ -83,8 +101,7 @@ export function registerDragIpc(): void {
           Math.round(wy + pt.y - startCursor.y),
           bw, bh
         );
-        dbgTick++;
-        if (dbgTick > 750) { endDrag(" (timeout)"); return; } // 硬上限 ~12s
+        if (Date.now() - dragStartedAt > 12_000) { endDrag(" (timeout)"); return; }
         if (nx === lastX && ny === lastY) {
           // 静止收尾（idle 看门狗）只服务"读不到按键状态"的 UU 触控场景：
           // 本地鼠标左键仍按住 = 用户在长按中（走完进度后继续按着/拖动中途停顿），
@@ -92,12 +109,12 @@ export function registerDragIpc(): void {
           // 防松手信号丢失僵死（2026-08-13 修正：原先固定 400ms 静止即收尾，
           // 长按走完进度后继续按着不动会被误杀，之后移动鼠标拖不动）
           const stillDown = !!(GetAsyncKeyState(0x01) & 0x8000);
-          if (stillDown) { stillTicks = 0; return; }
-          stillTicks++;
-          if (stillTicks > 25) endDrag(" (idle)"); // 光标静止 ~400ms 自动收尾
+          if (stillDown) { lastMovementAt = Date.now(); dragLoop = setImmediate(tick); return; }
+          if (Date.now() - lastMovementAt > 400) endDrag(" (idle)");
+          if (dragLoop) dragLoop = setImmediate(tick);
           return;
         }
-        stillTicks = 0;
+        lastMovementAt = Date.now();
         lastX = nx; lastY = ny;
         // SetWindowPos 是 Win32 API，入参必须是物理像素；而 getPosition/getCursorScreenPoint
         // 返回逻辑像素（DPI 缩放后）。100% 缩放两者相等；缩放 >100% 时不换算会出现拖动偏移
@@ -107,11 +124,13 @@ export function registerDragIpc(): void {
       } catch (err: any) {
         console.error("[touchdeck] drag tick error:", err && err.message ? err.message : String(err));
       }
-    }, 16);
+      if (dragLoop) dragLoop = setImmediate(tick);
+    };
+    dragLoop = setImmediate(tick);
     console.log("[touchdeck] drag start", JSON.stringify([wx, wy]));
   });
 
   // 结束拖拽的唯一信号：渲染端松手（pointerup）或下一次按下兜底。
   // UU 触控注入下 GetAsyncKeyState 读不到按键状态（2026-08-02 实测），不能用它判松手
-  ipcMain.on("stop-drag", () => { console.log("[touchdeck] stop-drag received, timer running:", !!dragTimer); endDrag(" (stop-drag)"); });
+  ipcMain.on("stop-drag", () => { console.log("[touchdeck] stop-drag received, loop running:", !!dragLoop); endDrag(" (stop-drag)"); });
 }

@@ -29,7 +29,7 @@ function Bubble() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;   // 只响应主键；侧键（XButton）由主进程轮询处理，不触发球按压
+      if (e.button !== 0) return;   // 只响应主键；中键由主进程轮询处理，不触发球按压
       s.pressed = true;
       s.dragging = false;
       body.classList.add("pressed");
@@ -89,7 +89,7 @@ function Bubble() {
       s.dragging = false;
     });
 
-    // 侧键传送淡入淡出：以 opacity transitionend 回执主进程，避免固定定时器早于 DWM 绘制提交。
+    // 中键传送淡入淡出：以 opacity transitionend 回执主进程，避免固定定时器早于 DWM 绘制提交。
     window.touchdeck.onBubbleFade((visible: boolean, requestId: string) => {
       const wantsFading = !visible;
       const alreadyThere = body.classList.contains("fading") === wantsFading;

@@ -1,6 +1,15 @@
-// TouchDeck 控制台（React + Tailwind）：本机面板启停 + P2P 远程连接 + 状态总览。
-// 视觉 1:1 复刻原生 HTML 版（暗色卡片风），交互语义不变。
+// TouchDeck 控制台：深色指挥中心风格，自绘标题栏 + 宽屏双栏工作区。
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import appIcon from "../../assets/app-icon.png";
+import activityIcon from "lucide-static/icons/activity.svg";
+import commandIcon from "lucide-static/icons/command.svg";
+import maximizeIcon from "lucide-static/icons/square.svg";
+import minimizeIcon from "lucide-static/icons/minus.svg";
+import monitorIcon from "lucide-static/icons/monitor.svg";
+import phoneIcon from "lucide-static/icons/smartphone.svg";
+import resetIcon from "lucide-static/icons/rotate-ccw.svg";
+import saveIcon from "lucide-static/icons/save.svg";
+import xIcon from "lucide-static/icons/x.svg";
 
 interface PanelStatus { panelRunning: boolean; panelDisabled: boolean; }
 interface P2PStatus { phase?: string; code?: string; pairingKey?: string; pairingPending?: boolean; pairingError?: string; hostFingerprint?: string; peers?: number; state?: string; error?: string; attempt?: number; revokingDevices?: boolean; revokeError?: string; devicesRevoked?: boolean; }
@@ -12,9 +21,8 @@ interface Preset extends Binding { label: string; description: string; }
 // P2P 运行态（按钮显示「关闭连接」）；不在列表里的 phase 都是可开启态
 const P2P_ACTIVE = ["connecting", "signal-ok", "room", "peer-joined", "peer-state", "connected", "peer-error", "reconnecting"];
 
-const card = "bg-[#222228] border border-[#33333a] rounded-xl px-4 py-3.5 mb-3";
-const btnMain = "bg-[#2f6fed] hover:bg-[#3d7dff] text-white rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-default cursor-pointer";
-const btnDanger = "border border-[#7f1d1d] hover:bg-[#3b1b1f] text-[#fca5a5] rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-default cursor-pointer";
+const btnMain = "button button-primary";
+const btnDanger = "button button-danger";
 
 const pairingErrorText: Record<string, string> = {
   "signal-unavailable": "信令尚未连接",
@@ -27,7 +35,28 @@ const pairingErrorText: Record<string, string> = {
 };
 
 function Dot({ ok }: { ok: boolean }) {
-  return <div className={`w-[9px] h-[9px] rounded-full flex-none ${ok ? "bg-[#4ade80] dot-glow" : "bg-[#ef4444]"}`} />;
+  return <span className={`status-dot ${ok ? "is-online" : ""}`} />;
+}
+
+function WindowIcon({ kind }: { kind: "minimize" | "maximize" | "close" }) {
+  const src = kind === "minimize" ? minimizeIcon : kind === "maximize" ? maximizeIcon : xIcon;
+  return <img src={src} alt="" />;
+}
+
+function shortcutParts(keys: Binding["keys"]): string[] {
+  const parts = [keys.ctrl && "Ctrl", keys.shift && "Shift", keys.alt && "Alt", keys.win && "Win"].filter(Boolean) as string[];
+  if (typeof keys.key === "string" && keys.key) {
+    const aliases: Record<string, string> = { escape: "Esc", enter: "Enter", backspace: "Backspace", space: "Space", tab: "Tab" };
+    parts.push(aliases[keys.key.toLowerCase()] || keys.key.toUpperCase());
+  }
+  return parts;
+}
+
+// 快捷键渲染成键帽组合，比纯文本「Ctrl + Alt + K」更可扫读
+function Keycaps({ keys }: { keys: Binding["keys"] }) {
+  const parts = shortcutParts(keys);
+  if (!parts.length) return <span className="kbd-empty">未设置</span>;
+  return <span className="keycaps">{parts.map((part, i) => <kbd key={i}>{part}</kbd>)}</span>;
 }
 
 export default function App() {
@@ -226,119 +255,140 @@ export default function App() {
     case "signal-failed": p2pLabel = "信令重连失败（" + (p2p.error || "已达上限") + "）"; break;
   }
 
-  return (
-    <div className="p-[18px] max-w-[920px] mx-auto">
-      <h1 className="text-[19px] mb-3">TouchDeck</h1>
+  const actions: ActionId[] = ["voice", "esc", "enter", "newline", "paste", "command-menu", "clear-input", "delete-word", "slash"];
+  const names: Record<ActionId, string> = { voice: "语音", esc: "中断", enter: "发送", newline: "换行", paste: "粘贴", "command-menu": "命令菜单", "clear-input": "清空输入", "delete-word": "按词删除", slash: "/ 命令" };
+  const windowControl = (action: "minimize" | "maximize" | "close") => window.touchdeck.consoleWindowControl(action);
 
-      {/* 顶部状态总览 */}
-      <div className="flex gap-[18px] bg-[#1e1e24] border border-[#33333a] rounded-[10px] px-3.5 py-2.5 mb-3.5">
-        <div className="flex items-center gap-[7px] text-[13px] text-[#ccc]">
-          <Dot ok={p2pConnected} /><span>P2P {p2pConnected ? "已直连" : p2pActive ? "连接中" : "未开启"}</span>
-        </div>
-        <div className="flex items-center gap-[7px] text-[13px] text-[#ccc]">
-          <Dot ok={panel.panelRunning} /><span>面板 {panel.panelRunning ? "运行中" : "已关闭"}</span>
-        </div>
-        <div className="flex items-center text-[13px]"><span className="text-[#888]">{scene}</span></div>
+  return <div className="app-shell">
+    <header className="titlebar" onDoubleClick={() => windowControl("maximize")}>
+      <div className="brand">
+        <img src={appIcon} alt="" />
+        <span>TouchDeck</span>
+        <span className="brand-caption">控制台</span>
       </div>
-
-      <div className={card}>
-        <h2 className="text-sm font-semibold mb-2">Windows 悬浮菜单</h2>
-        <div className="flex items-center gap-2.5">
-          <span className="text-[#ccc] flex-1 text-[13px]">{panel.panelRunning ? "运行中" : panel.panelDisabled ? "已关闭" : "未运行"}</span>
-          <button className={btnMain} disabled={panelBusy} onClick={togglePanel}>
-            {panel.panelRunning ? "关闭面板" : "开启面板"}
+      <div className="window-controls" onDoubleClick={(e) => e.stopPropagation()}>
+        {(["minimize", "maximize", "close"] as const).map((kind) => (
+          <button key={kind} className={`window-button ${kind === "close" ? "close" : ""}`} aria-label={kind} onClick={() => windowControl(kind)}>
+            <WindowIcon kind={kind} />
           </button>
+        ))}
+      </div>
+    </header>
+
+    <main className="workspace">
+      <div className="page-head">
+        <div className="page-title">
+          <h1>控制台</h1>
+          <p>悬浮菜单与手机远程触控的总开关</p>
+        </div>
+        <div className="status-chips">
+          <span className="chip"><Dot ok={panel.panelRunning} />悬浮菜单 {panel.panelRunning ? "运行中" : "未运行"}</span>
+          <span className="chip"><Dot ok={p2pConnected} />{p2pConnected ? `${peersN || 1} 台设备在线` : p2pActive ? "连接中" : "未连接"}</span>
+          <span className="chip"><img src={activityIcon} alt="" />{scene.replace(/^场景\s*/, "")}</span>
         </div>
       </div>
 
-      <div className={card}>
-        <div className="flex items-center mb-3"><h2 className="text-sm font-semibold flex-1">动作</h2><span className="text-[#888] text-xs">9 个常用动作</span></div>
-        {bindings && presets && (
-          <div>
-            <div className="grid grid-cols-2 gap-2.5">
-            {(["voice", "esc", "enter", "newline", "paste", "command-menu", "clear-input", "delete-word", "slash"] as ActionId[]).map((actionId) => {
-              const binding = bindings.bindings[actionId];
-              const names: Record<ActionId, string> = { voice: "语音", esc: "中断", enter: "发送", newline: "换行", paste: "粘贴", "command-menu": "命令菜单", "clear-input": "清空输入", "delete-word": "按词删除", slash: "/ 命令" };
-              return <div key={actionId} className="p-2.5 bg-[#1b1b20] rounded-lg border border-[#33333a]">
-                <div className="flex items-center gap-2 mb-2"><strong className="text-sm flex-1">{names[actionId]}</strong><button className="text-xs text-[#9ac8ff] cursor-pointer" onClick={() => resetBinding(actionId)}>恢复</button></div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <select className="bg-[#27272d] border border-[#44444d] rounded px-2 py-1.5 text-xs" value={binding.presetId} onChange={(e) => choosePreset(actionId, e.target.value)}>
-                    {presets[actionId].map((preset) => <option key={preset.presetId} value={preset.presetId}>{preset.label} · {preset.description}</option>)}
-                    <option value="custom">自定义</option>
-                  </select>
-                  <select className="bg-[#27272d] border border-[#44444d] rounded px-2 py-1.5 text-xs" value={binding.triggerMode} disabled={binding.presetId !== "custom"} onChange={(e) => updateBinding(actionId, { ...binding, triggerMode: e.target.value as "tap" | "hold" })}>
-                    <option value="tap">单击触发</option><option value="hold">按住保持</option>
-                  </select>
-                </div>
-                {binding.presetId === "custom" && <div className="flex items-center gap-2 flex-wrap">
-                  {(["ctrl", "shift", "alt", "win"] as const).map((mod) => <label key={mod} className="text-xs text-[#ccc]"><input type="checkbox" className="mr-1" checked={binding.keys[mod] === true} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, [mod]: e.target.checked } })}/>{mod === "win" ? "Win" : mod[0].toUpperCase() + mod.slice(1)}</label>)}
-                  <select className="ml-auto bg-[#27272d] border border-[#44444d] rounded px-2 py-1 text-xs" value={typeof binding.keys.key === "string" ? binding.keys.key : ""} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, key: e.target.value || undefined as any } })}>
-                    <option value="">无主键</option>{["escape","tab","enter","backspace","space",..."abcdefghijklmnopqrstuvwxyz"].map((key) => <option key={key} value={key}>{key}</option>)}
-                  </select>
-                </div>}
-              </div>;
-            })}
+      <div className="dashboard-grid">
+        <section className="surface actions-card">
+          <div className="section-heading actions-heading">
+            <div className="heading-with-icon">
+              <span className="icon-tile"><img src={commandIcon} alt="" /></span>
+              <h2>快捷动作</h2>
             </div>
-            <div className="flex gap-2 justify-end mt-3"><button className={btnDanger} onClick={resetAllBindings}>全部恢复</button><button className={btnMain} disabled={bindingBusy} onClick={() => saveBindings()}>{bindingBusy ? "保存中…" : "保存并同步"}</button></div>
+            <span className="count-badge">{actions.length} 个</span>
           </div>
-        )}
-      </div>
+          {bindings && presets && <>
+            <div className="action-grid">
+              {actions.map((actionId) => {
+                const binding = bindings.bindings[actionId];
+                return <article key={actionId} className="action-item">
+                  <div className="action-title">
+                    <div>
+                      <strong>{names[actionId]}</strong>
+                      <Keycaps keys={binding.keys} />
+                    </div>
+                    <button onClick={() => resetBinding(actionId)}>恢复</button>
+                  </div>
+                  <div className="select-row">
+                    <select value={binding.presetId} onChange={(e) => choosePreset(actionId, e.target.value)}>
+                      {presets[actionId].map((preset) => <option key={preset.presetId} value={preset.presetId}>{preset.label}</option>)}
+                      <option value="custom">自定义</option>
+                    </select>
+                    <select value={binding.triggerMode} disabled={binding.presetId !== "custom"} onChange={(e) => updateBinding(actionId, { ...binding, triggerMode: e.target.value as "tap" | "hold" })}>
+                      <option value="tap">单击触发</option>
+                      <option value="hold">按住保持</option>
+                    </select>
+                  </div>
+                  {binding.presetId === "custom" && <div className="key-editor">
+                    {(["ctrl", "shift", "alt", "win"] as const).map((mod) => (
+                      <label key={mod}>
+                        <input type="checkbox" checked={binding.keys[mod] === true} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, [mod]: e.target.checked } })} />
+                        {mod === "win" ? "Win" : mod[0].toUpperCase() + mod.slice(1)}
+                      </label>
+                    ))}
+                    <select value={typeof binding.keys.key === "string" ? binding.keys.key : ""} onChange={(e) => updateBinding(actionId, { ...binding, keys: { ...binding.keys, key: e.target.value || undefined as any } })}>
+                      <option value="">无主键</option>
+                      {["escape", "tab", "enter", "backspace", "space", ..."abcdefghijklmnopqrstuvwxyz"].map((key) => <option key={key} value={key}>{key}</option>)}
+                    </select>
+                  </div>}
+                </article>;
+              })}
+            </div>
+            <footer className="actions-footer">
+              <div>
+                <button className="button button-quiet" onClick={resetAllBindings}><img src={resetIcon} alt="" />恢复默认</button>
+                <button className={btnMain} disabled={bindingBusy} onClick={() => saveBindings()}><img src={saveIcon} alt="" />{bindingBusy ? "保存中…" : "保存更改"}</button>
+              </div>
+            </footer>
+          </>}
+        </section>
 
-      <div className={card}>
-        <h2 className="text-sm font-semibold mb-2">手机直连</h2>
-        <div className="flex items-center gap-2.5 mb-2">
-          <Dot ok={p2pDotOk} />
-          <span className="text-[#ccc] flex-1 text-[13px]">{p2pLabel}</span>
-          <button className={btnMain} disabled={p2pBusy} onClick={toggleP2p}>
-            {p2pActive ? "关闭连接" : "开启连接"}
-          </button>
-        </div>
-        {p2p.code && (
-          <div className="flex items-center gap-2 px-2.5 py-[7px] bg-[#1b1b20] border border-[#33333a] hover:border-[#4a4a55] rounded-lg mb-1.5 cursor-pointer"
-               title="点击复制房间码" onClick={copyRoom}>
-            <span className="text-[#888] text-xs w-16 flex-none">房间码</span>
-            <span className="font-mono text-xs text-[#9ac8ff] break-all flex-1">{p2p.code}</span>
-            <span className={`text-[#4ade80] text-xs flex-none ${copied ? "" : "hidden"}`}>已复制</span>
-          </div>
-        )}
-        {p2p.pairingKey && (
-          <div className="flex items-center gap-2 px-2.5 py-[7px] bg-[#1b1b20] border border-[#33333a] hover:border-[#4a4a55] rounded-lg mb-1.5 cursor-pointer"
-               title="点击复制配对密钥" onClick={copyPairKey}>
-            <span className="text-[#888] text-xs w-16 flex-none">配对密钥</span>
-            <span className="font-mono text-xs text-[#f0c674] break-all flex-1">{p2p.pairingKey}</span>
-            <span className={`text-[#4ade80] text-xs flex-none ${copiedKey ? "" : "hidden"}`}>已复制</span>
-          </div>
-        )}
-        {p2p.pairingKey && <div className="text-[#888] text-xs mb-1.5">密钥 5 分钟内仅可使用一次。</div>}
-        {p2p.code && !p2p.pairingKey && (
-          <div className="flex items-center gap-2.5 my-2">
-            <span className="text-[#888] text-xs flex-1">
-              新设备需要新密钥。
-            </span>
-            <button className={btnMain} disabled={p2p.pairingPending} onClick={createPairKey}>
-              {p2p.pairingPending ? "正在生成…" : "添加另一台设备"}
-            </button>
-          </div>
-        )}
-        {p2p.pairingError && <div className="text-[#f87171] text-xs mb-1.5">配对密钥生成失败：{pairingErrorText[p2p.pairingError] || p2p.pairingError}</div>}
-        {p2p.hostFingerprint && <div className="text-[#888] text-xs mt-1">主机身份指纹：<span className="font-mono">{p2p.hostFingerprint}</span></div>}
-        <div className="text-[#888] text-xs">首次连接输入房间码和配对密钥。</div>
-        {p2p.code && (
-          <div className="flex items-center gap-2.5 mt-3 pt-3 border-t border-[#33333a]">
-            <span className="text-[#777] text-xs flex-1">取消设备授权</span>
-            <button className={btnDanger} disabled={p2p.revokingDevices} onClick={revokeDevices}>
-              {p2p.revokingDevices ? "正在撤销…" : "忘记全部设备"}
-            </button>
-          </div>
-        )}
-        {p2p.devicesRevoked && <div className="text-[#4ade80] text-xs mt-1.5">已撤销全部设备；请生成新密钥后重新配对。</div>}
-        {p2p.revokeError && <div className="text-[#f87171] text-xs mt-1.5">撤销失败：{pairingErrorText[p2p.revokeError] || p2p.revokeError}</div>}
-      </div>
+        <aside className="side-stack">
+          <section className="surface quick-card">
+            <div className="section-heading">
+              <div className="heading-with-icon">
+                <span className="icon-tile"><img src={monitorIcon} alt="" /></span>
+                <h2>悬浮菜单</h2>
+              </div>
+              <span className={`state-pill ${panel.panelRunning ? "active" : ""}`}>{panel.panelRunning ? "运行中" : panel.panelDisabled ? "已关闭" : "未运行"}</span>
+            </div>
+            <button className={btnMain} disabled={panelBusy} onClick={togglePanel}>{panel.panelRunning ? "关闭" : "开启"}</button>
+          </section>
 
-      {/* toast */}
-      <div className={`fixed left-1/2 bottom-6 -translate-x-1/2 bg-[rgba(40,40,46,.95)] text-white text-[13px] px-3.5 py-2 rounded-[10px] transition-opacity duration-200 pointer-events-none z-10 ${toastMsg ? "opacity-100" : "opacity-0"}`}>
-        {toastMsg}
+          <section className="surface connection-card">
+            <div className="section-heading">
+              <div className="heading-with-icon">
+                <span className="icon-tile"><img src={phoneIcon} alt="" /></span>
+                <h2>手机直连</h2>
+              </div>
+              <Dot ok={p2pDotOk} />
+            </div>
+            <p className="connection-state">{p2pLabel}</p>
+            <button className={btnMain} disabled={p2pBusy} onClick={toggleP2p}>{p2pActive ? "关闭" : "开启"}</button>
+            <div className="connection-details">
+              {p2p.code && <button className="copy-row" title="点击复制房间码" onClick={copyRoom}>
+                <span>房间码</span><code>{p2p.code}</code><em>{copied ? "已复制" : "复制"}</em>
+              </button>}
+              {p2p.pairingKey && <button className="copy-row" title="点击复制配对密钥" onClick={copyPairKey}>
+                <span>配对密钥</span><code>{p2p.pairingKey}</code><em>{copiedKey ? "已复制" : "复制"}</em>
+              </button>}
+              {p2p.code && !p2p.pairingKey && <div className="inline-action">
+                <small>新设备需要新密钥。</small>
+                <button className="text-button" disabled={p2p.pairingPending} onClick={createPairKey}>{p2p.pairingPending ? "正在生成…" : "添加设备"}</button>
+              </div>}
+              {p2p.pairingError && <small className="error">配对密钥生成失败：{pairingErrorText[p2p.pairingError] || p2p.pairingError}</small>}
+              {p2p.hostFingerprint && <small>主机身份指纹：<code>{p2p.hostFingerprint}</code></small>}
+              {p2p.code && <div className="revoke-row">
+                <small>取消全部设备授权</small>
+                <button className={btnDanger} disabled={p2p.revokingDevices} onClick={revokeDevices}>{p2p.revokingDevices ? "正在撤销…" : "忘记全部设备"}</button>
+              </div>}
+              {p2p.devicesRevoked && <small className="success">已撤销全部设备，请重新配对。</small>}
+              {p2p.revokeError && <small className="error">撤销失败：{pairingErrorText[p2p.revokeError] || p2p.revokeError}</small>}
+            </div>
+          </section>
+        </aside>
       </div>
-    </div>
-  );
+    </main>
+    <div className={`toast ${toastMsg ? "visible" : ""}`}>{toastMsg}</div>
+  </div>;
 }
